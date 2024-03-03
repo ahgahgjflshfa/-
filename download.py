@@ -8,12 +8,12 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 N = 1
-START_DATE = "2018-04-17"   # year-month-day
+START_DATE = "2020-08-17"   # year-month-day
 MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
 
-year = START_DATE[:4]
-month = MONTH_NAMES[int(START_DATE[5:7]) - 1]
-day = START_DATE[8:].lstrip("0")    # delete leading zero
+START_YEAR = START_DATE[:4]
+START_MONTH = MONTH_NAMES[int(START_DATE[5:7]) - 1]
+START_DAY = START_DATE[8:].lstrip("0")    # delete leading zero
 
 # Set webdriver path
 service = Service(executable_path='./msedgedriver.exe')
@@ -21,13 +21,13 @@ service = Service(executable_path='./msedgedriver.exe')
 # Set options
 ie_options = webdriver.EdgeOptions()
 
-# # Creates data directory if it doesn't exist
-# if not os.path.exists('data'):
-#     os.makedirs('data')
+# # Creates download directory if it doesn't exist
+# if not os.path.exists('download'):
+#     os.makedirs('download')
 
 # Set default download directory
 cur_dir = os.getcwd()
-download_dir = os.path.join(cur_dir, 'data')
+download_dir = os.path.join(cur_dir, 'download')
 ie_options.add_experimental_option("prefs", {
     "download.default_directory": download_dir,
     })
@@ -84,7 +84,7 @@ year_select_button_element = WebDriverWait(driver, 10).until(
 year_select_button_element.click()
 
 # select specific year (e.g. "2023")
-xpath = f'//div[contains(@class, "vdatetime-year-picker__item") and contains(text(), "{year}")]'
+xpath = f'//div[contains(@class, "vdatetime-year-picker__item") and contains(text(), "{START_YEAR}")]'
 year_element = WebDriverWait(driver, 10).until(
     EC.presence_of_element_located((By.XPATH, xpath))
 )
@@ -97,14 +97,14 @@ month_select_button_element = WebDriverWait(driver, 10).until(
 month_select_button_element.click()
 
 # select specific month (e.g. "04")
-xpath = f'//div[contains(@class, "vdatetime-month-picker__item") and contains(text(), "{month}")]'
+xpath = f'//div[contains(@class, "vdatetime-month-picker__item") and contains(text(), "{START_MONTH}")]'
 month_element = WebDriverWait(driver, 10).until(
     EC.presence_of_element_located((By.XPATH, xpath))
 )
 month_element.click()
 
 # select specific day (e.g. "17")
-xpath = f'//div[contains(@class, "vdatetime-calendar__month__day") and descendant::span/span[text()="{day}"]]'
+xpath = f'//div[contains(@class, "vdatetime-calendar__month__day") and descendant::span/span[text()="{START_DAY}"]]'
 day_element = WebDriverWait(driver, 10).until(
     EC.presence_of_element_located((By.XPATH, xpath))
 )
@@ -122,6 +122,6 @@ for _ in range(N):
     prev_page_element = driver.find_element(By.XPATH, "/html/body/div/main/div/div/section[2]/div/div/section/div[5]/div[1]/div[1]/label/div/div[1]")
     prev_page_element.click()
 
-    time.sleep(0.5)   # wait for download to complete
+    time.sleep(1)   # wait for download to complete
 
 driver.quit()
