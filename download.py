@@ -7,7 +7,13 @@ from selenium.webdriver.support.ui import Select
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-N = 10
+N = 1
+START_DATE = "2018-04-17"   # year-month-day
+MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+
+year = START_DATE[:4]
+month = MONTH_NAMES[int(START_DATE[5:7]) - 1]
+day = START_DATE[8:].lstrip("0")    # delete leading zero
 
 # Set webdriver path
 service = Service(executable_path='./msedgedriver.exe')
@@ -32,13 +38,13 @@ driver = webdriver.Edge(service=service, options=ie_options)
 # goto website
 driver.get("https://codis.cwa.gov.tw/StationData")
 
-# select weather station
+# select temperature station
 checkbox_element = WebDriverWait(driver, 10).until(
     EC.presence_of_element_located((By.ID, "auto_C0"))
 )
 checkbox_element.click()
 
-# choose a specific station area (e.g. "桃園")
+# choose a specific area (e.g. "桃園")
 select_element = WebDriverWait(driver, 10).until(
     EC.presence_of_element_located((By.ID, "station_area"))
 )
@@ -53,7 +59,7 @@ input_element.send_keys("中壢 (C0C700)")
 
 time.sleep(1)
 
-# click search button
+# click station icon
 search_button_element = driver.find_element(By.XPATH, '/html/body/div[1]/main/div/div/section[1]/div[1]/div[3]/div[1]/div[1]/div[11]/div/div/div/div[2]')
 search_button_element.click()
 
@@ -64,6 +70,45 @@ view_button_element = WebDriverWait(driver, 10).until(
 view_button_element.click()
 
 time.sleep(1)
+
+# start from specific date
+date_button_element = WebDriverWait(driver, 10).until(
+    EC.presence_of_element_located((By.XPATH, '/html/body/div/main/div/div/section[2]/div/div/section/div[5]/div[1]/div[1]/label/div/div[2]/input'))
+)
+date_button_element.click()
+
+# find year select button and click it
+year_select_button_element = WebDriverWait(driver, 10).until(
+    EC.presence_of_element_located((By.XPATH, '/html/body/div/main/div/div/section[2]/div/div/section/div[5]/div[1]/div[1]/label/div/div[2]/div/div[2]/div[1]/div[1]'))
+)
+year_select_button_element.click()
+
+# select specific year (e.g. "2023")
+xpath = f'//div[contains(@class, "vdatetime-year-picker__item") and contains(text(), "{year}")]'
+year_element = WebDriverWait(driver, 10).until(
+    EC.presence_of_element_located((By.XPATH, xpath))
+)
+year_element.click()
+
+# find month select button and click it
+month_select_button_element = WebDriverWait(driver, 10).until(
+    EC.presence_of_element_located((By.XPATH, '/html/body/div/main/div/div/section[2]/div/div/section/div[5]/div[1]/div[1]/label/div/div[2]/div/div[2]/div[1]/div[2]'))
+)
+month_select_button_element.click()
+
+# select specific month (e.g. "04")
+xpath = f'//div[contains(@class, "vdatetime-month-picker__item") and contains(text(), "{month}")]'
+month_element = WebDriverWait(driver, 10).until(
+    EC.presence_of_element_located((By.XPATH, xpath))
+)
+month_element.click()
+
+# select specific day (e.g. "17")
+xpath = f'//div[contains(@class, "vdatetime-calendar__month__day") and descendant::span/span[text()="{day}"]]'
+day_element = WebDriverWait(driver, 10).until(
+    EC.presence_of_element_located((By.XPATH, xpath))
+)
+day_element.click()
 
 for _ in range(N):
     # download csv to Downloads
@@ -77,6 +122,6 @@ for _ in range(N):
     prev_page_element = driver.find_element(By.XPATH, "/html/body/div/main/div/div/section[2]/div/div/section/div[5]/div[1]/div[1]/label/div/div[1]")
     prev_page_element.click()
 
-    time.sleep(2)   # wait for download to complete
+    time.sleep(0.5)   # wait for download to complete
 
 driver.quit()
