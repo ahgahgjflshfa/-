@@ -31,6 +31,6 @@ OUTPUT_PATH = OUTPUT_FOLDER / OUTPUT_NAME
 if not OUTPUT_FOLDER.is_dir():
     OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
 
-daily_avg.to_csv(OUTPUT_PATH, index=False, lineterminator='')
+daily_avg.to_csv(OUTPUT_PATH, index=False)
 
 print(f"Average data saved to {OUTPUT_PATH}")

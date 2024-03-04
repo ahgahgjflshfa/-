@@ -3,7 +3,7 @@ AI專題 - model to predict future weather in Taoyuan Chungli using LSTM
 
 Data from [here](https://codis.cwa.gov.tw/StationData).
 
-Get webdriver from [here](https://developer.microsoft.com/en-us/microsoft-edge/tools/webdriver/?form=MA13LH)
+Get webdriver from [here](https://developer.microsoft.com/en-us/microsoft-edge/tools/webdriver/?form=MA13LH).
 
 # References:
 * [Time series prediction — LSTM的各種用法](https://peaceful0907.medium.com/time-series-prediction-lstm%E7%9A%84%E5%90%84%E7%A8%AE%E7%94%A8%E6%B3%95-ed36f0370204)
