@@ -10,14 +10,12 @@ for filename in sorted(os.listdir(DATA_FOLDER)):
         file_path = os.path.join(DATA_FOLDER, filename)
 
         # skip first two rows and uses only 2nd column
-        df = pd.read_csv(file_path, usecols=[1])    # usecols=[2] if choose to view download directory
+        df = pd.read_csv(file_path, usecols=[4])    # usecols=[2] if choose to view download directory
 
         # add download to dataframe
         dfs.append(df)
 
 df_combined = pd.concat(dfs, ignore_index=True)
-
-print(df_combined)
 
 df_combined['Temperature'] = pd.to_numeric(df_combined['Temperature'], errors='coerce')
 
