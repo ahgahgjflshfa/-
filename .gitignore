@@ -1,5 +1,5 @@
 .idea
-/data/
-/download/
-msedgedriver.exe
+data/*.csv
+/download
+driver/msedgedriver.exe
 /temp.py
