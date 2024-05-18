@@ -1,5 +1,6 @@
 import os
 import time
+import shutil
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -10,6 +11,10 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import Select
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+
+class DataIncorrectError(Exception):
+    def __init__(self, messages):
+        super.__init__(messages)
 
 def download_data(START_DATE: str, N: int=1, driver_path: str | Path="../driver/msedgedriver.exe"):
     """
@@ -144,85 +149,99 @@ def download_data(START_DATE: str, N: int=1, driver_path: str | Path="../driver/
 
     driver.quit()
 
-def data_convert(DATA_FOLDER: Path=Path("../download")):
-    FILE_LIST = list(DATA_FOLDER.glob("*.csv"))
+def process_file(file_path: Path):
+    year, month, day = file_path.name.rstrip(".csv").split("-")[1:]
 
-    daily_avg_list = []
+    proper_columns = ['ObsTime', "Temperature", "Dew", "RH", "Precp", "WS", "WD", "StnPres",
+             'Month_01', 'Month_02', 'Month_03', 'Month_04', 'Month_05', 'Month_06', 'Month_07', 'Month_08',
+             'Month_09', 'Month_10', 'Month_11', 'Month_12', 'PrecpType_None', 'PrecpType_Rain']
 
-    empty = []
-    for file in FILE_LIST:
-        # Extract date from file name
-        date_str = "".join(file.stem.split("-")[1:])
-        file_date = pd.to_datetime(date_str, format="%Y%m%d")
+    # Read csv file
+    df = pd.read_csv(file_path, skiprows=1, na_values=['--', '\\', '/', '&', 'X', ' '])  # fucking stupid
 
-        # Read csv file
-        try:
-            df = pd.read_csv(file, skiprows=1, na_values=['--', '\\', '/', '&', 'X', ' '])   # fucking stupid
-        except pd.errors.EmptyDataError as _:
-            empty.append(file)
-            continue
+    df['Dew'] = df['Temperature'] - (100 - df['RH']) / 5  # Dew point
+    df['Month'] = month  # Date
+    df['PrecpType'] = df['Precp'].apply(lambda x: 1 if x > 0.2 else 0)
 
-        df['Date'] = file_date  # Date
-        df['TempMax'] = df['Temperature'].max() # Maximum Temperature
-        df['TempMin'] = df['Temperature'].min() # Minimum Temperature
-        df['Dew'] = df['Temperature'] - (100 - df['RH']) / 5 # Dew point
-        df['PrecpType'] = df['Precp'].apply(lambda x: 1 if x > 0.2 else 0)
+    month_dummies = ['Month_01', 'Month_02', 'Month_03', 'Month_04', 'Month_05', 'Month_06', 'Month_07', 'Month_08',
+               'Month_09', 'Month_10', 'Month_11', 'Month_12']
 
-        df = df[['Date','TempMax','TempMin',"Temperature","Dew","RH","Precp", "PrecpType","WS","WD","StnPres"]]
+    for m, dummy in enumerate(month_dummies):
+        df[dummy] = df['Month'].apply(lambda x: True if int(x) == m + 1 else False)
 
-        daily_avg_list.append(df)
+    precptype_dummies = ['PrecpType_None', 'PrecpType_Rain']
 
-    daily_avg = pd.concat(daily_avg_list, ignore_index=True)
-    # daily_avg['Year'] = daily_avg['Date'].dt.year
-    # daily_avg['Month'] = daily_avg['Date'].dt.month
-    # daily_avg['Day'] = daily_avg['Date'].dt.day
-    # daily_avg = daily_avg.drop(columns=['Date'])
-    daily_avg = daily_avg.groupby(['Date']).agg({
-        'TempMax': 'mean',
-        'TempMin': 'mean',
-        'Temperature': 'mean',
-        'Dew': 'mean',
-        'RH': 'mean',
-        'Precp': 'mean',
-        'PrecpType': 'first',  # Don't calculate mean value of column `PrecpType`
-        'WS': 'mean',
-        'WD': 'mean',
-        'StnPres': 'mean'
-    }).reset_index()
+    for t, dummy in enumerate(precptype_dummies):
+        df[dummy] = df['PrecpType'].apply(lambda x: True if x == t else False)
 
-    daily_avg = daily_avg.round(2)
+    df = df[proper_columns]
 
-    # Replace NaN values
-    for i, column in enumerate(daily_avg.columns):
-        if i == 0:
-            continue
+    # Fill NaN values with mean, forward data, or backward data
+    for i, column in enumerate(df.columns):
+        # Check if the data downloaded aren't the right data
+        if column not in proper_columns:
+            raise DataIncorrectError(f"Should not have data column {column}")
 
-        # generates a random number 0 or 1 to decide ffill or bfill
-        random_choice = np.random.choice([0, 1])
-        if random_choice:
-            daily_avg[column] = daily_avg[column].ffill()
+        # Fill entire column NaNs with mean or 0 if the entire column is NaN
+        if df[column].isna().all():
+            df[column].fillna(0, inplace=True)
         else:
-            daily_avg[column] = daily_avg[column].bfill()
+            df[column].fillna(df[column].mean(), inplace=True)
 
-    OUTPUT_FOLDER = Path("../data")
-    OUTPUT_NAME = Path("data.csv")
-    OUTPUT_PATH = OUTPUT_FOLDER / OUTPUT_NAME
+    return (year, month, day), df.round(2)
 
-    # Check if output folder exist
-    if not OUTPUT_FOLDER.is_dir():
-        OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
+def split_data(test_size: float, path: str | Path = Path("download")):
+    data_path = Path(path)
+    train_dir = Path('data/train')
+    test_dir = Path('data/test')
 
-    daily_avg.to_csv(OUTPUT_PATH, index=False)
+    if train_dir.exists():
+        shutil.rmtree(train_dir)
 
-    print(f"Average data saved to {OUTPUT_PATH}")
+    if test_dir.exists():
+        shutil.rmtree(test_dir)
 
-def split_data(path: str | Path = Path("../data/data.csv")):
-    train_data, test_data = train_test_split(pd.read_csv(path), test_size=0.2)
+    # Create train and test directories if they don't exist
+    train_dir.mkdir(parents=True, exist_ok=True)
+    test_dir.mkdir(parents=True, exist_ok=True)
 
-    train_data.to_csv(Path("../data/train.csv"), index=False)
-    test_data.to_csv(Path("../data/test.csv"), index=False)
+    # List all CSV files in the data directory
+    csv_files = list(data_path.glob("*.csv"))
 
-def prepare_data(date: str, n: int=1):
+    train_files, test_files = train_test_split(csv_files, test_size=test_size, shuffle=True)
+
+    for file in train_files:
+        try:
+            (year, month, day), df = process_file(file)
+        except pd.errors.EmptyDataError or DataIncorrectError as e:
+            print(f"File {file} is empty or incorrect: {e}")
+            continue
+
+        # Check if file already exists
+        if (train_dir / f"{year}-{month}-{day}.csv").exists():
+            (train_dir / f"{year}-{month}-{day}.csv").unlink()
+
+        # Write file
+        df.to_csv(train_dir / f"{year}-{month}-{day}.csv", index=False)
+
+    for file in test_files:
+        try:
+            (year, month, day), df = process_file(file)
+        except pd.errors.EmptyDataError as _:
+            print(f"File {file} is empty or incorrect.")
+            continue
+
+        # Check if file already exists
+        if (test_dir / f"{year}-{month}-{day}.csv").exists():
+            (test_dir / f"{year}-{month}-{day}.csv").unlink()
+
+        # Write file
+        df.to_csv(test_dir / f"{year}-{month}-{day}.csv", index=False)
+
+    print(f'Saved {len(train_files)} files to {train_dir}')
+    print(f'Saved {len(test_files)} files to {test_dir}')
+
+def prepare_data(date: str="", n: int=1, test_size: float=0.2):
     """
 
     Args:
@@ -232,9 +251,10 @@ def prepare_data(date: str, n: int=1):
     Returns:
         None
     """
-    download_data(date, n)
-    data_convert()
-    split_data()
+    if date:
+        download_data(date, n)
+
+    split_data(test_size=test_size)
 
 if __name__ == "__main__":
-    prepare_data("2024-04-17", 1)
+    prepare_data()

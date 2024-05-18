@@ -39,9 +39,9 @@ def train_step(model: nn.Module,
         y_logits = model(X)
 
         # Calculate loss and accuracy (per batch)
-        loss = loss_fn(y_logits, y)
+        loss = loss_fn(y_logits.unsqueeze(2), y)
         train_loss += loss.item()   # Accumulate train loss
-        train_acc += acc_fn(y_logits, y)
+        # train_acc += acc_fn(y_logits.unsqueeze(2), y)
 
         # Optimizer zero grad
         optimizer.zero_grad()
@@ -54,7 +54,7 @@ def train_step(model: nn.Module,
 
     # Calculate average loss and accuracy
     train_loss /= len(data_loader)
-    train_acc /= len(data_loader)
+    # train_acc /= len(data_loader)
 
     return train_loss, train_acc
 
@@ -86,13 +86,13 @@ def test_step(model: nn.Module,
             y_logits = model(X)
 
             # Calculate loss and accuracy (per batch)
-            loss = loss_fn(y_logits, y)
+            loss = loss_fn(y_logits.unsqueeze(2), y)
             test_loss += loss.item()
-            test_acc += acc_fn(y_logits, y)
+            # test_acc += acc_fn(y_logits.unsqueeze(2), y)
 
         # Calculate average loss and accuracy
         test_loss /= len(data_loader)
-        test_acc /= len(data_loader)
+        # test_acc /= len(data_loader)
 
     return test_loss, test_acc
 
@@ -143,7 +143,7 @@ def train(model: nn.Module,
 
         if epoch % 100 == 0:
             progress_bar.update(1)
-            print(f"\nTrain loss: {train_loss:.5f} | Train acc: {train_acc:.2f} | Test loss: {test_loss:.5f} | Test acc: {test_acc:.2f}")
+            print(f"\nTrain loss: {train_loss:.5f} | Test loss: {test_loss:.5f}")
 
         # Update results dictionary
         results["train_loss"].append(train_loss)
@@ -155,16 +155,16 @@ if __name__ == "__main__":
     # Device agnostic code
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    train_dataset = WeatherDataset("data/train.csv", 20)
-    test_dataset = WeatherDataset("data/test.csv", 20)
+    train_dataset = WeatherDataset("./data/train", 20)
+    test_dataset = WeatherDataset("./data/test", 20)
 
-    training_dataloader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-    testing_dataloader = DataLoader(test_dataset, batch_size=32, shuffle=True)
+    training_dataloader = DataLoader(train_dataset, batch_size=64, shuffle=True)
+    testing_dataloader = DataLoader(test_dataset, batch_size=64, shuffle=True)
 
-    model = WeatherPredictModel(input_size=23,
+    model = WeatherPredictModel(input_size=22,
                                 hidden_unit=128,
                                 num_layers=2,
-                                output_size=1)
+                                output_size=24)
 
     model.to(device)
 
@@ -174,12 +174,16 @@ if __name__ == "__main__":
 
     # Check if there is a saved model
     save_path = "./models/model.pth"
-    if os.path.exists(save_path):
-        print(f"Model parameters loaded from {save_path}")
-        model.load_state_dict(torch.load(save_path))
+
+    try:
+        if os.path.exists(save_path):
+            model.load_state_dict(torch.load(save_path))
+            print(f"Model parameters loaded from {save_path}")
+    except RuntimeError as e:
+        print(f"Saved model state dict miss match current model.")
 
     results = train(model=model,
-                    epochs=100,
+                    epochs=200,
                     train_dataloader=training_dataloader,
                     test_dataloader=testing_dataloader,
                     loss_fn=loss_fn,
