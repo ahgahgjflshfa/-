@@ -9,7 +9,8 @@ class WeatherPredictModel(nn.Module):
         self.lstm = nn.LSTM(input_size=input_size,
                             hidden_size=hidden_unit,
                             num_layers=num_layers,
-                            batch_first=True)
+                            batch_first=True,
+                            dropout=0.4)
         self.fc = nn.Linear(hidden_unit, output_size)
 
     def forward(self, x):

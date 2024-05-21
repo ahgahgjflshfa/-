@@ -81,17 +81,16 @@ def plot_model_performance(model: nn.Module,
 
     Args:
         model:
-        dataset:
+        dataset: Testing dataset.
 
     Returns:
 
     """
-    prediction_dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
     model.eval()
 
     predictions = []
     with torch.no_grad():
-        for X, y in prediction_dataloader:
+        for X, y in dataset:
             p = model(X).item()
             predictions.append(p)
 

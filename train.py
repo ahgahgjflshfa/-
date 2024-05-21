@@ -102,6 +102,7 @@ def train(model: nn.Module,
           test_dataloader: DataLoader,
           loss_fn: nn.Module,
           optimizer: torch.optim.Optimizer,
+          scheduler: torch.optim.lr_scheduler,
           acc_fn,
           device: str = "cpu") -> dict[str, list[float]]:
     """
@@ -141,8 +142,13 @@ def train(model: nn.Module,
                                         acc_fn=acc_fn,
                                         device=device)
 
-        if epoch % 100 == 0:
-            progress_bar.update(1)
+        # scheduler.step(test_loss)
+
+        if test_loss < 7:
+            break
+
+        if epoch % 10 == 0:
+            # progress_bar.update(1)
             print(f"\nTrain loss: {train_loss:.5f} | Test loss: {test_loss:.5f}")
 
         # Update results dictionary
@@ -170,10 +176,11 @@ if __name__ == "__main__":
 
     # Prepare optimizer and loss function
     loss_fn = nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-4)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1.5e-3)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=20, factor=0.5, verbose=True)
 
     # Check if there is a saved model
-    save_path = "./models/model.pth"
+    save_path = "models/model.pth"
 
     try:
         if os.path.exists(save_path):
@@ -183,11 +190,12 @@ if __name__ == "__main__":
         print(f"Saved model state dict miss match current model.")
 
     results = train(model=model,
-                    epochs=200,
+                    epochs=1000,
                     train_dataloader=training_dataloader,
                     test_dataloader=testing_dataloader,
                     loss_fn=loss_fn,
                     optimizer=optimizer,
+                    scheduler=scheduler,
                     acc_fn=accuracy_fn,
                     device=device)
 

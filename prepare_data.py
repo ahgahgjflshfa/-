@@ -195,6 +195,11 @@ def split_data(test_size: float, path: str | Path = Path("download")):
     train_dir = Path('data/train')
     test_dir = Path('data/test')
 
+    print(os.getcwd())
+    print(train_dir.resolve())
+    print(test_dir.resolve())
+    print(path.resolve())
+
     if train_dir.exists():
         shutil.rmtree(train_dir)
 

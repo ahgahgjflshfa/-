@@ -48,6 +48,11 @@ class WeatherDataset(Dataset):
 
         start_idx = max(idx - self.sequence_length, 0)
 
+        # Check if idx is less than sequence_length
+        if idx < self.sequence_length:
+            # Ignore this index and move to the next one
+            idx = self.sequence_length
+
         X = self.datas[start_idx * 24: idx * 24]
 
         # Prevent index out of range error
@@ -63,7 +68,17 @@ class WeatherDataset(Dataset):
 
         y = self.datas[idx * 24 : idx * 24 + 24][:, 1].unsqueeze(1)
 
-        if y.shape != (24, 1):
-            i = 1
+        return X, y
+
+    def __iter__(self):
+        self._index = self.sequence_length  # Index is the day index not paths' index
+        return self
+
+    def __next__(self):
+        if self._index >= len(self):
+            raise StopIteration
+
+        X, y = self.__getitem__(self._index)
+        self._index += 1
 
         return X, y
