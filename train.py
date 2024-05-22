@@ -1,12 +1,13 @@
 import os.path
 import torch
+import argparse
 from tqdm import trange
 from torch import nn
-from models.model import WeatherPredictModel
+from models.model import LSTMModel
 from dataset import WeatherDataset
 from torch.utils.data import DataLoader
 from utils.plot_functions import plot_loss_curves
-from utils.accuracy_function import accuracy_fn
+from utils.accuracy_function import accuracy
 
 def train_step(model: nn.Module,
                data_loader: DataLoader,
@@ -39,9 +40,9 @@ def train_step(model: nn.Module,
         y_logits = model(X)
 
         # Calculate loss and accuracy (per batch)
-        loss = loss_fn(y_logits, y)
+        loss = loss_fn(y_logits.unsqueeze(2), y)
         train_loss += loss.item()   # Accumulate train loss
-        train_acc += acc_fn(y_logits, y)
+        train_acc += acc_fn(y_logits.unsqueeze(2), y)
 
         # Optimizer zero grad
         optimizer.zero_grad()
@@ -86,9 +87,9 @@ def test_step(model: nn.Module,
             y_logits = model(X)
 
             # Calculate loss and accuracy (per batch)
-            loss = loss_fn(y_logits, y)
+            loss = loss_fn(y_logits.unsqueeze(2), y)
             test_loss += loss.item()
-            test_acc += acc_fn(y_logits, y)
+            test_acc += acc_fn(y_logits.unsqueeze(2), y)
 
         # Calculate average loss and accuracy
         test_loss /= len(data_loader)
@@ -102,6 +103,7 @@ def train(model: nn.Module,
           test_dataloader: DataLoader,
           loss_fn: nn.Module,
           optimizer: torch.optim.Optimizer,
+          scheduler: torch.optim.lr_scheduler,
           acc_fn,
           device: str = "cpu") -> dict[str, list[float]]:
     """
@@ -121,7 +123,9 @@ def train(model: nn.Module,
         A dictionary containing all train loss, train accuracy, test loss and test accuracy while training the model.
     """
     results = {"train_loss": [],
-               "test_loss": []}
+               "test_loss": [],
+               "train_acc": [],
+               "test_acc": []}
 
     progress_bar = trange(epochs, desc="Epochs", position=0)
 
@@ -141,13 +145,20 @@ def train(model: nn.Module,
                                         acc_fn=acc_fn,
                                         device=device)
 
-        if epoch % 100 == 0:
-            progress_bar.update(1)
-            print(f"\nTrain loss: {train_loss:.5f} | Train acc: {train_acc:.2f} | Test loss: {test_loss:.5f} | Test acc: {test_acc:.2f}")
+        scheduler.step(test_loss)
+
+        if test_loss < 7:
+            break
+
+        if epoch % 10 == 0:
+            # progress_bar.update(1)
+            print(f"\nTrain loss: {train_loss:.5f} | Test loss: {test_loss:.5f} | Train accuracy: {train_acc} | Test accuracy: {test_acc}")
 
         # Update results dictionary
         results["train_loss"].append(train_loss)
         results["test_loss"].append(test_loss)
+        results["train_acc"].append(train_acc)
+        results["test_acc"].append(test_acc)
 
     return results
 
@@ -155,36 +166,42 @@ if __name__ == "__main__":
     # Device agnostic code
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    train_dataset = WeatherDataset("data/train.csv", 20)
-    test_dataset = WeatherDataset("data/test.csv", 20)
+    train_dataset = WeatherDataset("./data/train", 20)
+    test_dataset = WeatherDataset("./data/test", 20)
 
-    training_dataloader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-    testing_dataloader = DataLoader(test_dataset, batch_size=32, shuffle=True)
+    training_dataloader = DataLoader(train_dataset, batch_size=64, shuffle=True)
+    testing_dataloader = DataLoader(test_dataset, batch_size=64, shuffle=False)
 
-    model = WeatherPredictModel(input_size=23,
-                                hidden_unit=128,
-                                num_layers=2,
-                                output_size=1)
+    model = LSTMModel(input_size=22,
+                      hidden_unit=128,
+                      num_layers=2,
+                      output_size=24)
 
     model.to(device)
 
     # Prepare optimizer and loss function
     loss_fn = nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-4)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.0001, weight_decay=1.5e-3)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=10, factor=0.5, verbose=True)
 
     # Check if there is a saved model
-    save_path = "./models/model.pth"
-    if os.path.exists(save_path):
-        print(f"Model parameters loaded from {save_path}")
-        model.load_state_dict(torch.load(save_path))
+    save_path = "models/model.pth"
+
+    try:
+        if os.path.exists(save_path):
+            model.load_state_dict(torch.load(save_path))
+            print(f"Model parameters loaded from {save_path}")
+    except RuntimeError as e:
+        print(f"Saved model state dict miss match current model.")
 
     results = train(model=model,
-                    epochs=100,
+                    epochs=10,
                     train_dataloader=training_dataloader,
                     test_dataloader=testing_dataloader,
                     loss_fn=loss_fn,
                     optimizer=optimizer,
-                    acc_fn=accuracy_fn,
+                    scheduler=scheduler,
+                    acc_fn=accuracy,
                     device=device)
 
     plot_loss_curves(results)

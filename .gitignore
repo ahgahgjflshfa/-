@@ -1,6 +1,6 @@
 .idea
-data/*.csv
+data/test
+data/train
 /download
 driver/msedgedriver.exe
 /temp.py
-/models/model.pth

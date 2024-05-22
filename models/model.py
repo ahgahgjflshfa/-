@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-class WeatherPredictModel(nn.Module):
+class LSTMModel(nn.Module):
     def __init__(self, input_size, hidden_unit, num_layers, output_size):
         super().__init__()
         self.hidden_unit = hidden_unit

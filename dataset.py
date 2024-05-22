@@ -7,23 +7,21 @@ from sklearn.preprocessing import StandardScaler
 
 class WeatherDataset(Dataset):
     def __init__(self, root: str | Path, seq_length):
-        self.path = root
-        self.data = self.load_data()
+        self.paths = list(Path(root).glob("./*.csv"))
         self.sequence_length = seq_length
+        self.datas = self.load_datas()
+        self.X_scaler = self.prepare_scaler()
 
-        # Initialize StandardScaler for X
-        self.scaler_X = StandardScaler()
-        data = self.data.clone()
-        self.scaler_X.fit(data)  # Fit scaler on entire data
+    def prepare_scaler(self) -> StandardScaler:
+        scaler = StandardScaler()
+        scaler.fit(self.datas)
+        return scaler
 
-    def load_data(self):
+
+    def load_data(self, index: int):
         # Load data from csv file
-        df = pd.read_csv(self.path)
-
-        # Preprocess data
-        df['Month'] = df['Date'].str.split('-', expand=True)[1]
-        df = pd.get_dummies(df, columns=['PrecpType', 'Month'])
-        df = df.drop(columns=['Date'])
+        path = self.paths[index]
+        df = pd.read_csv(path)
         data = df.values
 
         # Transform data to torch.tensor
@@ -31,27 +29,56 @@ class WeatherDataset(Dataset):
 
         return data
 
+    def load_datas(self):
+        datas = []
+
+        for i in range(len(self.paths)):
+            datas.append(self.load_data(i))
+
+        datas = torch.cat(datas, dim=0)
+
+        return datas
+
     def __len__(self):
-        return len(self.data)
+        return len(self.paths)
 
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        # scaler = StandardScaler()
-
         start_idx = max(idx - self.sequence_length, 0)
 
-        X = self.data[start_idx:idx]
+        # Check if idx is less than sequence_length
+        if idx < self.sequence_length:
+            # Ignore this index and move to the next one
+            idx = self.sequence_length
+
+        X = self.datas[start_idx * 24: idx * 24]
 
         # Prevent index out of range error
-        if idx - start_idx < self.sequence_length:
-            padding_size = self.sequence_length - len(X)
-            padding = torch.zeros(padding_size, len(self.data[0]))
+        if len(X) == 0:
+            X = torch.zeros(self.sequence_length * 24, 22)
+
+        elif len(X) < self.sequence_length * 24:
+            padding_size = self.sequence_length * 24 - len(X)
+            padding = torch.zeros(padding_size, 22) # Create a zero tensor with the size of the (padding, in_feature).
             X = torch.cat([padding, X], dim=0)
 
-        X = torch.from_numpy(self.scaler_X.transform(X).astype(np.float32))
+        X = torch.from_numpy(self.X_scaler.transform(X).astype(np.float32))
 
-        y = self.data[idx][2].unsqueeze(0)
+        y = self.datas[idx * 24 : idx * 24 + 24][:, 1].unsqueeze(1)
+
+        return X, y
+
+    def __iter__(self):
+        self._index = self.sequence_length  # Index is the day index not paths' index
+        return self
+
+    def __next__(self):
+        if self._index >= len(self):
+            raise StopIteration
+
+        X, y = self.__getitem__(self._index)
+        self._index += 1
 
         return X, y
