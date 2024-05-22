@@ -4,4 +4,3 @@ data/train
 /download
 driver/msedgedriver.exe
 /temp.py
-/models/model.pth

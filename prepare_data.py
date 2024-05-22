@@ -2,6 +2,7 @@ import os
 import time
 import shutil
 import numpy as np
+import argparse
 import pandas as pd
 from pathlib import Path
 from sklearn.model_selection import train_test_split
@@ -16,26 +17,31 @@ class DataIncorrectError(Exception):
     def __init__(self, messages):
         super.__init__(messages)
 
-def download_data(START_DATE: str, N: int=1, driver_path: str | Path="../driver/msedgedriver.exe"):
+def download_data(start_date: str,
+                  n: int=1,
+                  driver_path: str | Path=Path("./driver/msedgedriver.exe"),
+                  dir_name: str="download"):
     """
     Download data starting from the specified START_DATE for N days.
 
     Args:
-        START_DATE: The start date from which to download the data in the format 'YYYY-MM-DD'.
-        N (optional): The number of days' worth of data to download, counting backwards from START_DATE.
+        start_date: The start date from which to download the data in the format 'YYYY-MM-DD'.
+        n (optional): The number of days' worth of data to download, counting backwards from START_DATE.
                         Defaults to 1.
-        driver_path (optional):driver_path (str, optional): The path to the driver executable used for web scraping.
+        driver_path (optional): The path to the driver executable used for web scraping.
                                 Defaults to "driver/msedgedriver.exe".
+        dir_name (optional): The directory name of download directory
 
     Returns:
         None
     """
 
-    MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+    MONTH_NAMES = ["January", "February", "March", "April", "May", "June",
+                   "July", "August", "September", "October", "November", "December"]
 
-    START_YEAR = START_DATE[:4]
-    START_MONTH = MONTH_NAMES[int(START_DATE[5:7]) - 1]
-    START_DAY = START_DATE[8:].lstrip("0")    # delete leading zero
+    START_YEAR = start_date[:4]
+    START_MONTH = MONTH_NAMES[int(start_date[5:7]) - 1]
+    START_DAY = start_date[8:].lstrip("0")    # delete leading zero
 
     # Set webdriver path
     service = Service(executable_path=driver_path)
@@ -49,8 +55,7 @@ def download_data(START_DATE: str, N: int=1, driver_path: str | Path="../driver/
 
     # Set default download directory
     cur_dir = os.getcwd()
-    parent_dir = os.path.dirname(cur_dir)
-    download_dir = os.path.join(parent_dir, 'download')
+    download_dir = os.path.join(cur_dir, dir_name)
     ie_options.add_experimental_option("prefs", {
         "download.default_directory": download_dir,
         })
@@ -133,7 +138,7 @@ def download_data(START_DATE: str, N: int=1, driver_path: str | Path="../driver/
     )
     day_element.click()
 
-    for _ in range(N):
+    for _ in range(n):
         # download csv to Downloads
         download_button_element = WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.XPATH, '/html/body/div/main/div/div/section[2]/div/div/section/div[5]/div[1]/div[2]/div'))
@@ -190,15 +195,10 @@ def process_file(file_path: Path):
 
     return (year, month, day), df.round(2)
 
-def split_data(test_size: float, path: str | Path = Path("download")):
+def split_data(test_size: float, path: str="download"):
     data_path = Path(path)
     train_dir = Path('data/train')
     test_dir = Path('data/test')
-
-    print(os.getcwd())
-    print(train_dir.resolve())
-    print(test_dir.resolve())
-    print(path.resolve())
 
     if train_dir.exists():
         shutil.rmtree(train_dir)
@@ -246,20 +246,36 @@ def split_data(test_size: float, path: str | Path = Path("download")):
     print(f'Saved {len(train_files)} files to {train_dir}')
     print(f'Saved {len(test_files)} files to {test_dir}')
 
-def prepare_data(date: str="", n: int=1, test_size: float=0.2):
+def prepare_data(date: str="",
+                 n: int=1,
+                 test_size: float=0.2,
+                 dir_name:str="download",
+                 split: bool=True):
     """
 
     Args:
-        date: Starting date.
-        n: Number of datas to download.
+        date (optional): Starting date. If no value pass, data won't be downloaded.
+        n (optional): Number of datas to download. Default is 1.
+        test_size (optional): Ratio of train data and test data. Default is 0.2
+        dir_name (optional): Directory to put downloaded files. Default is `download`
+        split (optional): Split data or not.
 
     Returns:
         None
     """
     if date:
-        download_data(date, n)
+        download_data(start_date=date, n=n, dir_name=dir_name)
 
-    split_data(test_size=test_size)
+    if split:
+        split_data(test_size=test_size)
 
 if __name__ == "__main__":
-    prepare_data()
+    parser = argparse.ArgumentParser(description="Download and split data into train and test sets.")
+    parser.add_argument("--date", type=str, default="", help="Starting date. If no value pass, data won't be downloaded.")
+    parser.add_argument("--n", type=int, default=1, help="Number of datas to download. Default is 1.")
+    parser.add_argument("--test_size", type=float, default=0.2, help="Ratio of test data size. Default is 0.2.")
+    parser.add_argument("--dir_name", type=str, default="download", help="Directory to put downloaded files. Default is `download`.")
+    parser.add_argument("--split", type=bool, default=True, help="Split data or not.")
+
+    args = parser.parse_args()
+    prepare_data(date=args.date, n=args.n, test_size=args.test_size, dir_name=args.dir_name, split=args.split)
