@@ -173,11 +173,11 @@ if __name__ == "__main__":
     testing_dataloader = DataLoader(test_dataset, batch_size=64, shuffle=False)
 
     model = LSTMModel(input_size=22,
-                      hidden_unit=128,
-                      num_layers=2,
-                      output_size=24)
-
-    model.to(device)
+                      hidden_size1=128,
+                      hidden_size2=512,
+                      hidden_size3=256,
+                      num_layers=3,
+                      output_size=24).to(device)
 
     # Prepare optimizer and loss function
     loss_fn = nn.MSELoss()
@@ -195,7 +195,7 @@ if __name__ == "__main__":
         print(f"Saved model state dict miss match current model.")
 
     results = train(model=model,
-                    epochs=10,
+                    epochs=200,
                     train_dataloader=training_dataloader,
                     test_dataloader=testing_dataloader,
                     loss_fn=loss_fn,
