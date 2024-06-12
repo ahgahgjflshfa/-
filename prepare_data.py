@@ -281,7 +281,8 @@ if __name__ == "__main__":
     parser.add_argument("--dir_name", type=str, default="download", help="Directory to put downloaded files. Default is `download`.")
     parser.add_argument("--split", type=bool, default=True, help="Split data or not.")
 
-    # args = parser.parse_args()
-    # prepare_data(date=args.date, n=args.n, test_size=args.test_size, dir_name=args.dir_name, split=args.split)
+    args = parser.parse_args()
 
-    prepare_data()
+    prepare_data(date=args.date, n=args.n, test_size=args.test_size, dir_name=args.dir_name, split=args.split)
+
+    # prepare_data()
