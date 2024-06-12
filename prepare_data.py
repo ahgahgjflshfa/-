@@ -17,10 +17,12 @@ class DataIncorrectError(Exception):
     def __init__(self, messages):
         super.__init__(messages)
 
-def download_data(start_date: str,
-                  n: int=1,
-                  driver_path: str | Path=Path("./driver/msedgedriver.exe"),
-                  dir_name: str="download"):
+def download_data(
+    start_date: str,
+    n: int=1,
+    driver_path: str | Path=Path("./driver/msedgedriver.exe"),
+    dir_name: str="download"
+):
     """
     Download data starting from the specified START_DATE for N days.
 
@@ -83,7 +85,7 @@ def download_data(start_date: str,
     input_element = WebDriverWait(driver, 10).until(
         EC.presence_of_element_located((By.XPATH, "/html/body/div/main/div/div/div/div/aside/div/div[1]/div/div/section/ul/li[5]/div/div[2]/div/input"))
     )
-    input_element.send_keys("中壢 (C0C700)")
+    input_element.send_keys("桃園 (C0C480)")
 
     time.sleep(1)
 
@@ -246,11 +248,13 @@ def split_data(test_size: float, path: str="download"):
     print(f'Saved {len(train_files)} files to {train_dir}')
     print(f'Saved {len(test_files)} files to {test_dir}')
 
-def prepare_data(date: str="",
-                 n: int=1,
-                 test_size: float=0.2,
-                 dir_name:str="download",
-                 split: bool=True):
+def prepare_data(
+    date: str="",
+    n: int=1,
+    test_size: float=0.2,
+    dir_name:str="download",
+    split: bool=True
+):
     """
 
     Args:
