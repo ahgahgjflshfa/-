@@ -10,3 +10,4 @@ driver/msedgedriver.exe
 /models/model.pth
 /graph
 /graph.png
+/banana.py

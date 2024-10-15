@@ -9,7 +9,7 @@ from torch.utils.data import Dataset
 import plotly.graph_objs as go
 from plotly.subplots import make_subplots
 
-def view_data(DATA_FOLDER: str="../data"):
+def view_data(DATA_FOLDER: str="./data"):
     """
     Visualize temperature data from multiple CSV files stored in the specified data folder.
 

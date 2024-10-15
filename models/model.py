@@ -9,7 +9,7 @@ class LSTMModel(nn.Module):
         hidden_size2,
         hidden_size3,
         num_layers,
-        output_size
+        output_size,
     ):
         super(LSTMModel, self).__init__()
 
@@ -18,6 +18,8 @@ class LSTMModel(nn.Module):
         self.hidden_size2 = hidden_size2
         self.hidden_size3 = hidden_size3
         self.num_layers = num_layers
+        self.output_size = output_size
+        self.output_features = 2  # Predict temperature and rainfall
 
         # Define the LSTM layers with fixed sizes
         self.lstm1 = nn.LSTM(
@@ -40,7 +42,7 @@ class LSTMModel(nn.Module):
         ) # Third LSTM layer
 
         # Define the fully connected output layer (Dense layer)
-        self.dense = nn.Linear(hidden_size3, output_size)
+        self.dense = nn.Linear(hidden_size3, output_size * self.output_features)
 
     def forward(self, x):
         # Initialize hidden and cell states for each layer
@@ -58,4 +60,7 @@ class LSTMModel(nn.Module):
 
         # Pass the output of the last LSTM layer to the fully connected layer
         out = self.dense(out[:, -1, :])
+
+        # Reshape output to [batch_size, output_size, 2] where 2 is for temperature and rainfall
+        out = out.view(-1, self.output_size, self.output_features)
         return out

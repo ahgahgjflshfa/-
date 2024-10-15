@@ -1,11 +1,8 @@
 # 專題
-AI專題 - model to predict future weather using LSTM model.
 
-Data from [here](https://codis.cwa.gov.tw/StationData).
+**Get webdriver from [Microsoft Edge WebDriver](https://developer.microsoft.com/en-us/microsoft-edge/tools/webdriver/?form=MA13LH).**
 
-Get webdriver from [here](https://developer.microsoft.com/en-us/microsoft-edge/tools/webdriver/?form=MA13LH).
-
-# Guide
+# Distribution Guide
 ## Prerequisites
 1. **Install Python Packages**:  
 Ensure you have the necessary Python packages installed. You can install them using the `requirements.txt` file:  
@@ -52,3 +49,4 @@ After training, you can evaluate your model using functions in `utils/plot_funct
 # References:
 * [Time series prediction — LSTM的各種用法](https://peaceful0907.medium.com/time-series-prediction-lstm%E7%9A%84%E5%90%84%E7%A8%AE%E7%94%A8%E6%B3%95-ed36f0370204)
 * [Time-series Forecasting using LSTM (PyTorch implementation)](https://medium.com/@ozdogar/time-series-forecasting-using-lstm-pytorch-implementation-86169d74942e)
+* [Long-Short Term Memory for an Effective Short-Term Weather Forecasting Model Using Surface Weather Data](https://core.ac.uk/download/pdf/227104047.pdf)

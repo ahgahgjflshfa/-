@@ -161,7 +161,7 @@ def process_file(file_path: Path):
 
     proper_columns = ['ObsTime', "Temperature", "Dew", "RH", "Precp", "WS", "WD", "StnPres",
              'Month_01', 'Month_02', 'Month_03', 'Month_04', 'Month_05', 'Month_06', 'Month_07', 'Month_08',
-             'Month_09', 'Month_10', 'Month_11', 'Month_12', 'PrecpType_None', 'PrecpType_Rain']
+             'Month_09', 'Month_10', 'Month_11', 'Month_12', 'PrecpType']
 
     # Read csv file
     df = pd.read_csv(file_path, skiprows=1, na_values=['--', '\\', '/', '&', 'X', ' '])  # fucking stupid
@@ -175,11 +175,6 @@ def process_file(file_path: Path):
 
     for m, dummy in enumerate(month_dummies):
         df[dummy] = df['Month'].apply(lambda x: True if int(x) == m + 1 else False)
-
-    precptype_dummies = ['PrecpType_None', 'PrecpType_Rain']
-
-    for t, dummy in enumerate(precptype_dummies):
-        df[dummy] = df['PrecpType'].apply(lambda x: True if x == t else False)
 
     df = df[proper_columns]
 
@@ -274,15 +269,5 @@ def prepare_data(
         split_data(test_size=test_size)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Download and split data into train and test sets.")
-    parser.add_argument("--date", type=str, default="", help="Starting date. If no value pass, data won't be downloaded.")
-    parser.add_argument("--n", type=int, default=1, help="Number of datas to download. Default is 1.")
-    parser.add_argument("--test_size", type=float, default=0.2, help="Ratio of test data size. Default is 0.2.")
-    parser.add_argument("--dir_name", type=str, default="download", help="Directory to put downloaded files. Default is `download`.")
-    parser.add_argument("--split", type=bool, default=True, help="Split data or not.")
 
-    args = parser.parse_args()
-
-    prepare_data(date=args.date, n=args.n, test_size=args.test_size, dir_name=args.dir_name, split=args.split)
-
-    # prepare_data()
+    prepare_data()

@@ -66,7 +66,10 @@ class WeatherDataset(Dataset):
 
         X = torch.from_numpy(self.X_scaler.transform(X).astype(np.float32))
 
-        y = self.datas[idx * 24 : idx * 24 + 24][:, 1].unsqueeze(1)
+        # Temperature, Dew, RH, StnPres, PrecpType
+        indices = [1, 4] #, 2, 3, 7, 20]
+
+        y = self.datas[idx * 24 : idx * 24 + 24][:, indices]
 
         return X, y
 

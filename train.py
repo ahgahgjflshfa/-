@@ -30,9 +30,6 @@ def train_step(
         loss_fn: The loss function used for training.
         optimizer: The optimizer used for training.
         device (optional): The device to use for training and inference. Default is "cpu".
-
-    Returns:
-
     """
     train_loss = 0
 
@@ -55,11 +52,9 @@ def train_step(
             # Forward pass
             y_logits = model(X)
 
-            # Calculate loss and accuracy (per batch)
-            loss = loss_fn(y_logits.unsqueeze(2), y)
+            # Calculate loss (without unsqueeze, as y_logits and y should have matching shapes)
+            loss = loss_fn(y_logits, y)
             train_loss += loss.item()   # Accumulate train loss
-
-            run["train/batch/loss"].append(loss)
 
             # Optimizer zero grad
             optimizer.zero_grad()
@@ -70,7 +65,7 @@ def train_step(
             # Optimizer step
             optimizer.step()
 
-    # Calculate average loss and accuracy
+    # Calculate average loss
     train_loss /= len(data_loader)
 
     return train_loss
@@ -83,15 +78,11 @@ def test_step(
 ):
     """
     Performs a single testing step on the given model using the given testing data and hyperparameters.
-
     Args:
         model: The model to test.
         data_loader: The DataLoader object used for testing.
         loss_fn: The loss function used for testing.
         device (optional): The device to use for training and inference. Default is "cpu".
-
-    Returns:
-
     """
     test_loss = 0
     model.eval()
@@ -103,14 +94,12 @@ def test_step(
             # Forward pass
             y_logits = model(X)
 
-            # Calculate loss and accuracy (per batch)
-            loss = loss_fn(y_logits.unsqueeze(2), y)
+            # Calculate loss
+            loss = loss_fn(y_logits, y)
             test_loss += loss.item()
 
-            run['test/batch/loss'].append(loss)
-
-        # Calculate average loss
-        test_loss /= len(data_loader)
+    # Calculate average loss
+    test_loss /= len(data_loader)
 
     return test_loss
 
@@ -126,17 +115,14 @@ def train(
 ) -> dict:
     """
     Trains the specified neural network model using the given training data and hyperparameters.
-
     Args:
         model: The neural network model to be trained.
         epochs (optional): The number of epochs (iterations over the entire training dataset) to train the model.
-                           Default is 200.
         train_dataloader: The DataLoader object used for training.
         test_dataloader: The DataLoader object used for testing.
         loss_fn: The loss function used for training.
         optimizer: The optimizer used for training.
         device (optional): The device to use for training and inference. Default is "cpu".
-
     Returns:
         A dictionary containing all train loss, train accuracy, test loss and test accuracy while training the model.
     """
@@ -164,12 +150,8 @@ def train(
 
         if epoch % 10 == 0:
             ckp = model.state_dict()
-            torch.save(ckp, f"../models/model.pth")
+            torch.save(ckp, f"./models/model.pth")
             print("Checkpoint saved.")
-
-        # if epoch % 10 == 0:
-        #     # progress_bar.update(1)
-        #     print(f"\nEpoch: {epoch} | Train loss: {train_loss:.5f} | Test loss: {test_loss:.5f}")
 
         # Update results dictionary
         results["train_loss"].append(train_loss)
@@ -179,36 +161,37 @@ def train(
 
 if __name__ == "__main__":
 
-    load_dotenv()
+    # load_dotenv()
 
-    # Neptune Setup
-    run = neptune.init_run(
-        project="ahgahgjflshfa/SchoolProject",
-        api_token=os.getenv("TOKEN"),
-        dependencies="../requirements.txt"
-    )
+    # Neptune Setup (commented out)
+    # run = neptune.init_run(
+    #     project="ahgahgjflshfa/SchoolProject",
+    #     api_token=os.getenv("TOKEN"),
+    #     dependencies="./requirements.txt"
+    # )
 
     params = {
         'sequence': 20,
         'bs': 64,
         'lr': 3e-4,
         'weight_decay': 1.5e-3,
-        'input_sz': 22,
-        'hid_sz1': 128,
-        'hid_sz2': 512,
-        'hid_sz3': 256,
-        'n_layers': 1,
-        'output_sz': 24
+        'input_sz': 21,        # Input size (number of features)
+        'hid_sz1': 128,        # Hidden size of first LSTM
+        'hid_sz2': 512,        # Hidden size of second LSTM
+        'hid_sz3': 256,        # Hidden size of third LSTM
+        'n_layers': 1,         # Number of LSTM layers
+        'out_sz': 24,          # Output sequence length
+        'out_feats': 2         # Output features (temperature and rainfall)
     }
-    run["parameters"] = params
-
-    run["train/datas"].track_files('../data/train')
+    # run["parameters"] = params
+    #
+    # run["train/datas"].track_files('./data/train')
 
     # Device agnostic code
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    train_dataset = WeatherDataset('../data/train', params['sequence'])
-    test_dataset = WeatherDataset('../data/test', params['sequence'])
+    train_dataset = WeatherDataset('./data/train', params['sequence'])
+    test_dataset = WeatherDataset('./data/test', params['sequence'])
 
     training_dataloader = DataLoader(train_dataset, batch_size=params['bs'], shuffle=True)
     testing_dataloader = DataLoader(test_dataset, batch_size=params['bs'], shuffle=False)
@@ -219,17 +202,17 @@ if __name__ == "__main__":
         hidden_size2=params['hid_sz2'],
         hidden_size3=params['hid_sz3'],
         num_layers=params['n_layers'],
-        output_size=params['output_sz']
+        output_size=params['out_sz'],
     ).to(device)
 
 
     # Prepare optimizer and loss function
-    loss_fn = nn.MSELoss()
+    loss_fn = nn.MSELoss()  # Mean Squared Error Loss for regression
     optimizer = torch.optim.Adam(model.parameters(), lr=params['lr'], weight_decay=params['weight_decay'])
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=10, factor=0.5, verbose=True)
 
     # Check if there is a saved model
-    save_path = "../models/model.pth"
+    save_path = "./models/model.pth"
 
     try:
         if os.path.exists(save_path):
@@ -250,17 +233,6 @@ if __name__ == "__main__":
         scheduler=scheduler,
         device=device
     )
-
-    run["model/file"].upload(save_path)
-
-    # Plot performance
-    fig1 = plot_model_performance(model, train_dataset)
-    run["model/train-performance"].upload(fig1)
-
-    fig2 = plot_model_performance(model, test_dataset)
-    run["model/test-performance"].upload(fig2)
-
-    run.stop()
 
     # Save model
     torch.save(model.state_dict(), save_path)
