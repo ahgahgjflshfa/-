@@ -17,10 +17,12 @@ class DataIncorrectError(Exception):
     def __init__(self, messages):
         super.__init__(messages)
 
-def download_data(start_date: str,
-                  n: int=1,
-                  driver_path: str | Path=Path("./driver/msedgedriver.exe"),
-                  dir_name: str="download"):
+def download_data(
+    start_date: str,
+    n: int=1,
+    driver_path: str | Path=Path("./driver/msedgedriver.exe"),
+    dir_name: str="download"
+):
     """
     Download data starting from the specified START_DATE for N days.
 
@@ -83,7 +85,7 @@ def download_data(start_date: str,
     input_element = WebDriverWait(driver, 10).until(
         EC.presence_of_element_located((By.XPATH, "/html/body/div/main/div/div/div/div/aside/div/div[1]/div/div/section/ul/li[5]/div/div[2]/div/input"))
     )
-    input_element.send_keys("中壢 (C0C700)")
+    input_element.send_keys("桃園 (C0C480)")
 
     time.sleep(1)
 
@@ -159,7 +161,7 @@ def process_file(file_path: Path):
 
     proper_columns = ['ObsTime', "Temperature", "Dew", "RH", "Precp", "WS", "WD", "StnPres",
              'Month_01', 'Month_02', 'Month_03', 'Month_04', 'Month_05', 'Month_06', 'Month_07', 'Month_08',
-             'Month_09', 'Month_10', 'Month_11', 'Month_12', 'PrecpType_None', 'PrecpType_Rain']
+             'Month_09', 'Month_10', 'Month_11', 'Month_12', 'PrecpType']
 
     # Read csv file
     df = pd.read_csv(file_path, skiprows=1, na_values=['--', '\\', '/', '&', 'X', ' '])  # fucking stupid
@@ -173,11 +175,6 @@ def process_file(file_path: Path):
 
     for m, dummy in enumerate(month_dummies):
         df[dummy] = df['Month'].apply(lambda x: True if int(x) == m + 1 else False)
-
-    precptype_dummies = ['PrecpType_None', 'PrecpType_Rain']
-
-    for t, dummy in enumerate(precptype_dummies):
-        df[dummy] = df['PrecpType'].apply(lambda x: True if x == t else False)
 
     df = df[proper_columns]
 
@@ -246,11 +243,13 @@ def split_data(test_size: float, path: str="download"):
     print(f'Saved {len(train_files)} files to {train_dir}')
     print(f'Saved {len(test_files)} files to {test_dir}')
 
-def prepare_data(date: str="",
-                 n: int=1,
-                 test_size: float=0.2,
-                 dir_name:str="download",
-                 split: bool=True):
+def prepare_data(
+    date: str="",
+    n: int=1,
+    test_size: float=0.2,
+    dir_name:str="download",
+    split: bool=True
+):
     """
 
     Args:
@@ -270,12 +269,5 @@ def prepare_data(date: str="",
         split_data(test_size=test_size)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Download and split data into train and test sets.")
-    parser.add_argument("--date", type=str, default="", help="Starting date. If no value pass, data won't be downloaded.")
-    parser.add_argument("--n", type=int, default=1, help="Number of datas to download. Default is 1.")
-    parser.add_argument("--test_size", type=float, default=0.2, help="Ratio of test data size. Default is 0.2.")
-    parser.add_argument("--dir_name", type=str, default="download", help="Directory to put downloaded files. Default is `download`.")
-    parser.add_argument("--split", type=bool, default=True, help="Split data or not.")
 
-    args = parser.parse_args()
-    prepare_data(date=args.date, n=args.n, test_size=args.test_size, dir_name=args.dir_name, split=args.split)
+    prepare_data()

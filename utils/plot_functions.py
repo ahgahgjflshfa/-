@@ -6,7 +6,10 @@ import torch.nn as nn
 import matplotlib.pyplot as plt
 from torch.utils.data import Dataset
 
-def view_data(DATA_FOLDER: str="../data"):
+import plotly.graph_objs as go
+from plotly.subplots import make_subplots
+
+def view_data(DATA_FOLDER: str="./data"):
     """
     Visualize temperature data from multiple CSV files stored in the specified data folder.
 
@@ -40,45 +43,34 @@ def view_data(DATA_FOLDER: str="../data"):
     plt.show()
 
 def plot_loss_curves(results):
-    """Plots training curves of a results dictionary.
+    """
+    Plots training curves of a results dictionary.
 
     Args:
         results (dict): dictionary containing list of values, e.g.
             {"train_loss": [...],
-             "train_acc": [...],
-             "test_loss": [...],
-             "test_acc": [...]}
+             "test_loss": [...]}
     """
     loss = results["train_loss"]
     test_loss = results["test_loss"]
 
-    accuracy = results["train_acc"]
-    test_accuracy = results["test_acc"]
-
     epochs = range(len(results["train_loss"]))
 
-    plt.figure(figsize=(15, 7))
+    plt.figure(figsize=(9, 9))
 
     # Plot loss
-    plt.subplot(1, 2, 1)
     plt.plot(epochs, loss, label="train_loss")
     plt.plot(epochs, test_loss, label="test_loss")
     plt.title("Loss")
     plt.xlabel("Epochs")
     plt.legend()
 
-    # Plot accuracy
-    plt.subplot(1, 2, 2)
-    plt.plot(epochs, accuracy, label="train_accuracy")
-    plt.plot(epochs, test_accuracy, label="test_accuracy")
-    plt.title("Accuracy")
-    plt.xlabel("Epochs")
-    plt.legend()
-
     plt.show()
 
-def plot_model_performance(model: nn.Module,
-                           dataset: Dataset):
+def plot_model_performance(
+    model: nn.Module,
+    dataset: Dataset
+):
     """
     Plot the performance of the model by comparing actual temperatures with predicted temperatures.
 
@@ -112,12 +104,29 @@ def plot_model_performance(model: nn.Module,
     actual_temperatures = np.array(actual_temperatures)
     predictions = np.array(predictions).flatten()  # Flatten the predictions array
 
-    # Plot actual and predicted temperatures
-    plt.figure(figsize=(10, 6))
-    plt.plot(actual_temperatures, label='Actual Temperatures')
-    plt.plot(predictions, label='Predicted Temperatures')
-    plt.xlabel('Time')
-    plt.ylabel('Temperature')
-    plt.title('Actual vs. Predicted Temperatures')
-    plt.legend()
-    plt.show()
+    fig = make_subplots()
+
+    fig.add_trace(go.Scatter(
+        x=list(range(len(actual_temperatures))),
+        y=actual_temperatures,
+        mode='lines',
+        name='Actual Temperatures'
+    ))
+
+    fig.add_trace(go.Scatter(
+        x=list(range(len(predictions))),
+        y=predictions,
+        mode='lines',
+        name='Predicted Temperatures'
+    ))
+
+    fig.update_layout(
+        title='Actual vs. Predicted Temperatures',
+        xaxis_title='Time',
+        yaxis_title='Temperature',
+        legend=dict(x=0, y=1, traceorder='normal'),
+        width=800,
+        height=600
+    )
+
+    return fig

@@ -4,3 +4,10 @@ data/train
 /download
 driver/msedgedriver.exe
 /temp.py
+/.env
+/log/
+/wandb/
+/models/model.pth
+/graph
+/graph.png
+/banana.py
