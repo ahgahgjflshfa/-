@@ -156,41 +156,100 @@ def download_data(
 
     driver.quit()
 
+# 定義 weather.csv 中的目標特徵
+proper_columns = [
+    'date', 'StnPres', 'T (degC)', 'Tpot (K)', 'Tdew (degC)', 'rh (%)',
+    'VPmax (mbar)', 'VPact (mbar)', 'VPdef (mbar)', 'sh (g/kg)',
+    'H2OC (mmol/mol)', 'rho (g/m**3)', 'wv (m/s)', 'max. wv (m/s)',
+    'wd (deg)', 'rain (mm)', 'raining (s)', 'SWDR (W/m²)', 'PAR (µmol/m²/s)',
+    'max. PAR (µmol/m²/s)', 'Tlog (degC)', 'OT'
+]
+
 def process_file(file_path: Path):
+    # 提取文件名中的年月日信息
     year, month, day = file_path.name.rstrip(".csv").split("-")[1:]
 
-    proper_columns = ['ObsTime', "Temperature", "Dew", "RH", "Precp", "WS", "WD", "StnPres",
-             'Month_01', 'Month_02', 'Month_03', 'Month_04', 'Month_05', 'Month_06', 'Month_07', 'Month_08',
-             'Month_09', 'Month_10', 'Month_11', 'Month_12', 'PrecpType']
+    # 讀取 CSV 文件
+    df = pd.read_csv(file_path, skiprows=1, na_values=['--', '\\', '/', '&', 'X', ' '])
 
-    # Read csv file
-    df = pd.read_csv(file_path, skiprows=1, na_values=['--', '\\', '/', '&', 'X', ' '])  # fucking stupid
+    # 修正 ObsTime 中的 24 為 00 並且日期增加一天
+    df['ObsDate'] = f"{year}-{month}-{day}"
+    df['ObsTime'] = df['ObsTime'].astype(str)
 
-    df['Dew'] = df['Temperature'] - (100 - df['RH']) / 5  # Dew point
-    df['Month'] = month  # Date
-    df['PrecpType'] = df['Precp'].apply(lambda x: 1 if x > 0.2 else 0)
+    # 處理 "24" 的情況，將其替換為 "00" 並將日期加一天
+    mask_24 = df['ObsTime'] == "24"
+    if mask_24.any():
+        df.loc[mask_24, 'ObsTime'] = "00"
+        df.loc[mask_24, 'ObsDate'] = pd.to_datetime(df.loc[mask_24, 'ObsDate']) + pd.Timedelta(days=1)
 
-    month_dummies = ['Month_01', 'Month_02', 'Month_03', 'Month_04', 'Month_05', 'Month_06', 'Month_07', 'Month_08',
-               'Month_09', 'Month_10', 'Month_11', 'Month_12']
+    # 確保 ObsDate 是 datetime 類型，並轉換為字符串格式
+    df['ObsDate'] = pd.to_datetime(df['ObsDate']).dt.strftime("%Y-%m-%d")
 
-    for m, dummy in enumerate(month_dummies):
-        df[dummy] = df['Month'].apply(lambda x: True if int(x) == m + 1 else False)
+    # 確保 ObsTime 總是兩位數格式（如 "1" 轉換為 "01"）
+    df['ObsTime'] = df['ObsTime'].str.zfill(2)
 
+    # 合併日期和時間，生成完整的日期時間列
+    try:
+        df['date'] = pd.to_datetime(df['ObsDate'] + " " + df['ObsTime'] + ":00", format="%Y-%m-%d %H:%M")
+    except ValueError as e:
+        print(f"日期時間解析錯誤: {e}")
+        raise
+
+    # 添加溫度相關特徵
+    df['T (degC)'] = df['Temperature']
+    df['Tpot (K)'] = df['Temperature'] + 273.15  # 假設 Tpot 是絕對溫度
+    df['Tdew (degC)'] = df['Temperature'] - (100 - df['RH']) / 5  # 估算露點溫度
+
+    # 相對濕度
+    df['rh (%)'] = df['RH']
+
+    # 計算 VPmax, VPact, VPdef
+    df['VPmax (mbar)'] = 6.11 * 10**(7.5 * df['Temperature'] / (237.3 + df['Temperature']))
+    df['VPact (mbar)'] = df['VPmax (mbar)'] * (df['RH'] / 100)
+    df['VPdef (mbar)'] = df['VPmax (mbar)'] - df['VPact (mbar)']
+
+    # 比濕計算（假設為常數換算）
+    df['sh (g/kg)'] = 0.622 * df['VPact (mbar)'] / (df['StnPres'] - df['VPact (mbar)']) * 1000
+
+    # 水蒸氣濃度計算
+    df['H2OC (mmol/mol)'] = df['sh (g/kg)'] / 18.02 * 1000  # 假設分子量為 18.02
+
+    # 空氣密度
+    df['rho (g/m**3)'] = df['StnPres'] / (287.05 * (df['Temperature'] + 273.15))
+
+    # 風速和風向
+    df['wv (m/s)'] = df['WS']
+    df['max. wv (m/s)'] = df['WS']  # 假設無最大風速數據，用 WS 代替
+    df['wd (deg)'] = df['WD']
+
+    # 雨量和下雨狀況
+    df['rain (mm)'] = df['Precp']
+    df['raining (s)'] = df['Precp'].apply(lambda x: 3600 if x > 0 else 0)  # 假設下雨時為 3600 秒
+
+    # 輻射相關特徵
+    df['SWDR (W/m²)'] = df['SunShine'] if 'SunShine' in df.columns else 0  # 使用 SunShine 代替 SWDR
+    df['PAR (µmol/m²/s)'] = 0  # 默認設為 0
+    df['max. PAR (µmol/m²/s)'] = 0  # 默認設為 0
+
+    # 日誌溫度和 OT
+    df['Tlog (degC)'] = df['Temperature']
+    df['OT'] = df['Temperature']  # 假設 OT 與溫度相同
+
+    # 只保留目標列
     df = df[proper_columns]
 
-    # Fill NaN values with mean, forward data, or backward data
-    for i, column in enumerate(df.columns):
-        # Check if the data downloaded aren't the right data
-        if column not in proper_columns:
-            raise DataIncorrectError(f"Should not have data column {column}")
+    # 填補缺失值
+    for column in df.columns:
+        if pd.api.types.is_numeric_dtype(df[column]):
+            if df[column].isna().all():
+                df[column].fillna(0, inplace=True)
+            else:
+                df[column].fillna(df[column].mean(), inplace=True)
 
-        # Fill entire column NaNs with mean or 0 if the entire column is NaN
-        if df[column].isna().all():
-            df[column].fillna(0, inplace=True)
-        else:
-            df[column].fillna(df[column].mean(), inplace=True)
+    # 將 StnPres 列名更改為 p (mbar)
+    df.rename(columns={'StnPres': 'p (mbar)'}, inplace=True)
 
-    return (year, month, day), df.round(2)
+    return df.round(2)
 
 def split_data(test_size: float, path: str="download"):
     data_path = Path(path)
@@ -243,12 +302,24 @@ def split_data(test_size: float, path: str="download"):
     print(f'Saved {len(train_files)} files to {train_dir}')
     print(f'Saved {len(test_files)} files to {test_dir}')
 
+def save_to_weather_csv(input_directory, output_file):
+    combined_df = pd.DataFrame()
+    input_directory = Path(input_directory)
+    file_paths = list(input_directory.glob("*.csv"))
+
+    for file_path in file_paths:
+        df = process_file(file_path)
+        combined_df = pd.concat([combined_df, df], ignore_index=True)
+
+    combined_df.to_csv(output_file, index=False)
+
 def prepare_data(
     date: str="",
     n: int=1,
     test_size: float=0.2,
     dir_name:str="download",
-    split: bool=True
+    split: bool=False,
+    output_file="./dataset/weather.csv"
 ):
     """
 
@@ -267,6 +338,8 @@ def prepare_data(
 
     if split:
         split_data(test_size=test_size)
+
+    save_to_weather_csv(input_directory=dir_name, output_file=output_file)
 
 if __name__ == "__main__":
 

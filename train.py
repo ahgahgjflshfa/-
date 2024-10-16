@@ -6,6 +6,8 @@ from models.model import LSTMModel
 from dataset import WeatherDataset
 from torch.utils.data import DataLoader
 
+from models.segRNN import SegRNNModel
+
 import neptune
 from neptune.types import File
 from dotenv import load_dotenv
@@ -175,7 +177,7 @@ if __name__ == "__main__":
         'bs': 64,
         'lr': 3e-4,
         'weight_decay': 1.5e-3,
-        'input_sz': 21,        # Input size (number of features)
+        'input_sz': 12,        # Input size (number of features)
         'hid_sz1': 128,        # Hidden size of first LSTM
         'hid_sz2': 512,        # Hidden size of second LSTM
         'hid_sz3': 256,        # Hidden size of third LSTM
@@ -196,7 +198,7 @@ if __name__ == "__main__":
     training_dataloader = DataLoader(train_dataset, batch_size=params['bs'], shuffle=True)
     testing_dataloader = DataLoader(test_dataset, batch_size=params['bs'], shuffle=False)
 
-    model = LSTMModel(
+    model = SegRNNModel(
         input_size=params['input_sz'],
         hidden_size1=params['hid_sz1'],
         hidden_size2=params['hid_sz2'],
@@ -204,7 +206,6 @@ if __name__ == "__main__":
         num_layers=params['n_layers'],
         output_size=params['out_sz'],
     ).to(device)
-
 
     # Prepare optimizer and loss function
     loss_fn = nn.MSELoss()  # Mean Squared Error Loss for regression
@@ -221,7 +222,7 @@ if __name__ == "__main__":
     except RuntimeError as e:
         print(f"Saved model state dict miss match current model.")
 
-    EPOCHS = 100
+    EPOCHS = 1000
 
     results = train(
         model=model,
