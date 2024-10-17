@@ -1,10 +1,9 @@
 from data_provider.data_factory import data_provider
 from exp.exp_basic import Exp_Basic
-from models import Informer, Autoformer, Transformer, DLinear, Linear, NLinear, PatchTST, VanillaRNN, SegRNN
+from models.SegRNN import SegRNN
 from utils.tools import EarlyStopping, adjust_learning_rate, visual, test_params_flop
 from utils.metrics import metric
 
-import numpy as np
 import torch
 import torch.nn as nn
 from torch import optim
@@ -14,49 +13,42 @@ import os
 import time
 
 import warnings
-import matplotlib.pyplot as plt
 import numpy as np
 
 warnings.filterwarnings('ignore')
-
 
 class Exp_Main(Exp_Basic):
     def __init__(self, args):
         super(Exp_Main, self).__init__(args)
 
     def _build_model(self):
-        model_dict = {
-            'Autoformer': Autoformer,
-            'Transformer': Transformer,
-            'Informer': Informer,
-            'DLinear': DLinear,
-            'NLinear': NLinear,
-            'Linear': Linear,
-            'PatchTST': PatchTST,
-            'VanillaRNN': VanillaRNN,
-            'SegRNN': SegRNN
-        }
-        model = model_dict[self.args.model].Model(self.args).float()
+        model = SegRNN(self.args).float()
 
         if self.args.use_multi_gpu and self.args.use_gpu:
             model = nn.DataParallel(model, device_ids=self.args.device_ids)
+
         return model
 
     def _get_data(self, flag):
         data_set, data_loader = data_provider(self.args, flag)
+
         return data_set, data_loader
 
     def _select_optimizer(self):
         model_optim = optim.Adam(self.model.parameters(), lr=self.args.learning_rate)
+
         return model_optim
 
     def _select_criterion(self):
         if self.args.loss == "mae":
             criterion = nn.L1Loss()
+
         elif self.args.loss == "mse":
             criterion = nn.MSELoss()
+
         else:
             criterion = nn.L1Loss()
+
         return criterion
 
     def vali(self, vali_data, vali_loader, criterion):
@@ -67,30 +59,14 @@ class Exp_Main(Exp_Basic):
                 batch_x = batch_x.float().to(self.device)
                 batch_y = batch_y.float()
 
-                batch_x_mark = batch_x_mark.float().to(self.device)
-                batch_y_mark = batch_y_mark.float().to(self.device)
-
-                # decoder input
-                dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
-                dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
                 # encoder - decoder
                 if self.args.use_amp:
                     with torch.cuda.amp.autocast():
-                        if any(substr in self.args.model for substr in {'Linear', 'SegRNN', 'TST'}):
-                            outputs = self.model(batch_x)
-                        else:
-                            if self.args.output_attention:
-                                outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-                            else:
-                                outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
-                else:
-                    if any(substr in self.args.model for substr in {'Linear', 'SegRNN', 'TST'}):
                         outputs = self.model(batch_x)
-                    else:
-                        if self.args.output_attention:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-                        else:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+
+                else:
+                    outputs = self.model(batch_x)
+
                 f_dim = -1 if self.args.features == 'MS' else 0
                 outputs = outputs[:, -self.args.pred_len:, f_dim:]
                 batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
@@ -101,11 +77,17 @@ class Exp_Main(Exp_Basic):
                 loss = criterion(pred, true)
 
                 total_loss.append(loss)
+
         total_loss = np.average(total_loss)
         self.model.train()
+
         return total_loss
 
     def train(self, setting):
+        # if self.args.load_pretrained:
+        #     print(f"Loading pretrained weights from {self.args.pretrained_path}\n")
+        #     self.model.load_pretrained_weights(self.args.pretrained_path)
+
         train_data, train_loader = self._get_data(flag='train')
         vali_data, vali_loader = self._get_data(flag='val')
         test_data, test_loader = self._get_data(flag='test')
@@ -137,46 +119,28 @@ class Exp_Main(Exp_Basic):
 
             self.model.train()
             epoch_time = time.time()
-            # max_memory = 0
-            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(train_loader):
+
+            for i, (batch_x, batch_y) in enumerate(train_loader):
                 iter_count += 1
                 model_optim.zero_grad()
+
                 batch_x = batch_x.float().to(self.device)
-
                 batch_y = batch_y.float().to(self.device)
-                batch_x_mark = batch_x_mark.float().to(self.device)
-                batch_y_mark = batch_y_mark.float().to(self.device)
-
-                # decoder input
-                dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
-                dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
 
                 # encoder - decoder
                 if self.args.use_amp:
                     with torch.cuda.amp.autocast():
-                        if any(substr in self.args.model for substr in {'Linear', 'SegRNN', 'TST'}):
-                            outputs = self.model(batch_x)
-                        else:
-                            if self.args.output_attention:
-                                outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-                            else:
-                                outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                        outputs = self.model(batch_x)
 
                         f_dim = -1 if self.args.features == 'MS' else 0
                         outputs = outputs[:, -self.args.pred_len:, f_dim:]
                         batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
                         loss = criterion(outputs, batch_y)
                         train_loss.append(loss.item())
-                else:
-                    if any(substr in self.args.model for substr in {'Linear', 'SegRNN', 'TST'}):
-                        outputs = self.model(batch_x)
-                    else:
-                        if self.args.output_attention:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
 
-                        else:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark, batch_y)
-                    # print(outputs.shape,batch_y.shape)
+                else:
+                    outputs = self.model(batch_x)
+
                     f_dim = -1 if self.args.features == 'MS' else 0
                     outputs = outputs[:, -self.args.pred_len:, f_dim:]
                     batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
@@ -187,7 +151,7 @@ class Exp_Main(Exp_Basic):
                     print("\titers: {0}, epoch: {1} | loss: {2:.7f}".format(i + 1, epoch + 1, loss.item()))
                     speed = (time.time() - time_now) / iter_count
                     left_time = speed * ((self.args.train_epochs - epoch) * train_steps - i)
-                    print('\tspeed: {:.4f}s/iter; left time: {:.4f}s'.format(speed, left_time))
+                    print('\tspeed: {:.4f}s/iter; left time: {:.4f}s\n'.format(speed, left_time))
                     iter_count = 0
                     time_now = time.time()
 
@@ -195,12 +159,10 @@ class Exp_Main(Exp_Basic):
                     scaler.scale(loss).backward()
                     scaler.step(model_optim)
                     scaler.update()
+
                 else:
                     loss.backward()
                     model_optim.step()
-
-                # current_memory = torch.cuda.max_memory_allocated() / 1024 ** 2
-                # max_memory = max(max_memory, current_memory)
 
                 if self.args.lradj == 'TST':
                     adjust_learning_rate(model_optim, scheduler, epoch + 1, self.args, printout=False)
@@ -226,15 +188,13 @@ class Exp_Main(Exp_Basic):
         best_model_path = path + '/' + 'checkpoint.pth'
         self.model.load_state_dict(torch.load(best_model_path))
 
-        # print(f"Max Memory (MB): {max_memory}")
-
         return self.model
 
     def test(self, setting, test=0):
         test_data, test_loader = self._get_data(flag='test')
 
         if test:
-            print('loading model')
+            print('loading model\n')
             self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
 
         preds = []
@@ -247,35 +207,17 @@ class Exp_Main(Exp_Basic):
         begin_time = time.time()
         self.model.eval()
         with torch.no_grad():
-            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_loader):
+            for i, (batch_x, batch_y) in enumerate(test_loader):
                 batch_x = batch_x.float().to(self.device)
                 batch_y = batch_y.float().to(self.device)
 
-                batch_x_mark = batch_x_mark.float().to(self.device)
-                batch_y_mark = batch_y_mark.float().to(self.device)
-
-                # decoder input
-                dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
-                dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
                 # encoder - decoder
                 if self.args.use_amp:
                     with torch.cuda.amp.autocast():
-                        if any(substr in self.args.model for substr in {'Linear', 'SegRNN', 'TST'}):
-                            outputs = self.model(batch_x)
-                        else:
-                            if self.args.output_attention:
-                                outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-                            else:
-                                outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
-                else:
-                    if any(substr in self.args.model for substr in {'Linear', 'SegRNN', 'TST'}):
                         outputs = self.model(batch_x)
-                    else:
-                        if self.args.output_attention:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
 
-                        else:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                else:
+                    outputs = self.model(batch_x)
 
                 f_dim = -1 if self.args.features == 'MS' else 0
                 # print(outputs.shape,batch_y.shape)
@@ -284,16 +226,23 @@ class Exp_Main(Exp_Basic):
                 outputs = outputs.detach().cpu().numpy()
                 batch_y = batch_y.detach().cpu().numpy()
 
-                pred = outputs  # outputs.detach().cpu().numpy()  # .squeeze()
-                true = batch_y  # batch_y.detach().cpu().numpy()  # .squeeze()
+                pred = outputs # test_data.inverse_transform(outputs)  # .squeeze()
+                true = batch_y # test_data.inverse_transform(batch_y)  # .squeeze()
 
                 preds.append(pred)
                 trues.append(true)
                 inputx.append(batch_x.detach().cpu().numpy())
+
                 if i % 20 == 0:
                     input = batch_x.detach().cpu().numpy()
-                    gt = np.concatenate((input[0, :, -1], true[0, :, -1]), axis=0)
-                    pd = np.concatenate((input[0, :, -1], pred[0, :, -1]), axis=0)
+
+                    pred = test_data.inverse_transform(outputs[0])
+                    true = test_data.inverse_transform(batch_y[0])
+                    input = test_data.inverse_transform(input[0])
+
+                    gt = np.concatenate((input[:, -1], true[:, -1]), axis=0)
+                    pd = np.concatenate((input[:, -1], pred[:, -1]), axis=0)
+
                     visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'))
 
         ms = (time.time() - begin_time) * 1000 / len(test_data)
@@ -305,11 +254,9 @@ class Exp_Main(Exp_Basic):
         # fix bug
         preds = np.concatenate(preds, axis=0)
         trues = np.concatenate(trues, axis=0)
-        inputx = np.concatenate(inputx, axis=0)
 
         preds = preds.reshape(-1, preds.shape[-2], preds.shape[-1])
         trues = trues.reshape(-1, trues.shape[-2], trues.shape[-1])
-        inputx = inputx.reshape(-1, inputx.shape[-2], inputx.shape[-1])
 
         # result save
         folder_path = './results/' + setting + '/'
@@ -343,35 +290,22 @@ class Exp_Main(Exp_Basic):
 
         self.model.eval()
         with torch.no_grad():
-            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(pred_loader):
+            for i, (batch_x, batch_y) in enumerate(pred_loader):
                 batch_x = batch_x.float().to(self.device)
-                batch_y = batch_y.float()
-                batch_x_mark = batch_x_mark.float().to(self.device)
-                batch_y_mark = batch_y_mark.float().to(self.device)
 
-                # decoder input
-                dec_inp = torch.zeros([batch_y.shape[0], self.args.pred_len, batch_y.shape[2]]).float().to(
-                    batch_y.device)
-                dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
                 # encoder - decoder
                 if self.args.use_amp:
                     with torch.cuda.amp.autocast():
-                        if any(substr in self.args.model for substr in {'Linear', 'SegRNN', 'TST'}):
-                            outputs = self.model(batch_x)
-                        else:
-                            if self.args.output_attention:
-                                outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-                            else:
-                                outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                        outputs = self.model(batch_x)   # Scaled
+
+                        original_prediction = pred_data.inverse_transform(outputs)
+
                 else:
-                    if any(substr in self.args.model for substr in {'Linear', 'SegRNN', 'TST'}):
-                        outputs = self.model(batch_x)
-                    else:
-                        if self.args.output_attention:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-                        else:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
-                pred = outputs.detach().cpu().numpy()  # .squeeze()
+                    outputs = self.model(batch_x)   # Scaled
+
+                    original_prediction = pred_data.inverse_transform(outputs)
+
+                pred = original_prediction.detach().cpu().numpy()  # .squeeze()
                 preds.append(pred)
 
         preds = np.array(preds)

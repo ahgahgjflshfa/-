@@ -8,3 +8,4 @@ tqdm>=4.66.2
 neptune>=1.10.4
 python-dotenv>=1.0.1
 plotly>=5.22.0
+typing>=3.10.0.0

@@ -1,5 +1,4 @@
 import argparse
-import os
 import torch
 from exp.exp_main import Exp_Main
 import random
@@ -9,14 +8,14 @@ import numpy as np
 def main():
     args = argparse.Namespace(
         random_seed=2024,
-        is_training=True,
+        is_training=True,       # 記得要改
         model_id="weather_720",
         model="SegRNN",
         data="custom",
         root_path="./dataset/",
-        data_path="weather.csv",
+        data_path="shifts_canonical_dev_in.csv",
         features="M",
-        target="OT",
+        target="fact_temperature",        # 这里你需要确保目标列存在，并且改成你需要预测的特征   # TODO: 逼逼
         freq="h",
         checkpoints="./checkpoints/",
         seq_len=720,
@@ -24,7 +23,7 @@ def main():
         pred_len=96,
         rnn_type="gru",
         dec_way="pmf",
-        seg_len=48,
+        seg_len=48,         # 要跟著 pred_len 一起改動
         win_len=48,
         channel_id=1,
         fc_dropout=0.05,
@@ -39,9 +38,9 @@ def main():
         kernel_size=25,
         individual=0,
         embed_type=0,
-        enc_in=21,
-        dec_in=21,
-        c_out=21,
+        enc_in=130, # 修改为你的特征数量? 就靠報錯了吧 我不知道這到底要怎麼算...
+        dec_in=116, # 修改为你的特征数量
+        c_out=116,  # 修改为你的特征数量
         d_model=512,
         n_heads=8,
         e_layers=2,

@@ -11,3 +11,8 @@ driver/msedgedriver.exe
 /graph
 /graph.png
 /banana.py
+/result.txt
+/results/
+/test_results/
+/dataset/
+/.neptune/
