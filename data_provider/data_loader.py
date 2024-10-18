@@ -10,7 +10,7 @@ warnings.filterwarnings('ignore')
 class Dataset_Custom(Dataset):
     def __init__(self, root_path, flag='train', size=None,
                  features='S', data_path='ETTh1.csv',
-                 target='OT', scale=True, timeenc=0, freq='h'):
+                 target='OT', scale=True, freq='h'):
         # size [seq_len, label_len, pred_len]
         # info
         if size == None:
@@ -29,7 +29,6 @@ class Dataset_Custom(Dataset):
         self.features = features
         self.target = target
         self.scale = scale
-        self.timeenc = timeenc
         self.freq = freq
 
         self.root_path = root_path
