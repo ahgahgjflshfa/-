@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
 
-class SegRNN(nn.Module):
+class Model(nn.Module):
     def __init__(self, configs):
-        super(SegRNN, self).__init__()
+        super(Model, self).__init__()
 
         # get parameters
         self.seq_len = configs.seq_len
@@ -69,27 +69,3 @@ class SegRNN(nn.Module):
         y = y.permute(0, 2, 1) + seq_last
 
         return y
-
-    # def load_pretrained_weights(self, checkpoint_path):
-    #     """
-    #     加載預訓練權重並處理輸入層不匹配的情況。
-    #     """
-    #     try:
-    #         checkpoint = torch.load(checkpoint_path)
-    #         model_dict = self.state_dict()
-    #
-    #         # 遍歷預訓練模型的權重，允許處理輸入層和輸出層的維度不匹配
-    #         pretrained_dict = {}
-    #         for k, v in checkpoint.items():
-    #             if k in model_dict:
-    #                 if model_dict[k].size() == v.size():
-    #                     pretrained_dict[k] = v
-    #                 else:
-    #                     print(
-    #                         f"Skipping layer '{k}' due to size mismatch: expected {model_dict[k].size()}, got {v.size()}")
-    #
-    #         model_dict.update(pretrained_dict)
-    #         self.load_state_dict(model_dict)
-    #         print(f"成功加載預訓練權重來自 {checkpoint_path}")
-    #     except Exception as e:
-    #         print(f"加載預訓練權重失敗: {e}")

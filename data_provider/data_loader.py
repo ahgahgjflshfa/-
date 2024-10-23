@@ -17,10 +17,12 @@ class Dataset_Custom(Dataset):
             self.seq_len = 24 * 4 * 4
             self.label_len = 24 * 4
             self.pred_len = 24 * 4
+
         else:
             self.seq_len = size[0]
             self.label_len = size[1]
             self.pred_len = size[2]
+
         # init
         assert flag in ['train', 'test', 'val']
         type_map = {'train': 0, 'val': 1, 'test': 2}
@@ -40,17 +42,17 @@ class Dataset_Custom(Dataset):
         df_raw = pd.read_csv(os.path.join(self.root_path,
                                           self.data_path))
 
-        categorical_columns = ['climate']
-        if categorical_columns:
-            df_raw = pd.get_dummies(df_raw, columns=categorical_columns)
+        # categorical_columns = ['climate']
+        # if categorical_columns:
+        #     df_raw = pd.get_dummies(df_raw, columns=categorical_columns)
 
         '''
         df_raw.columns: ['fact_time', ...(other features), target feature]
         '''
         cols = list(df_raw.columns)
         cols.remove(self.target)
-        cols.remove('fact_time')
-        df_raw = df_raw[['fact_time'] + cols + [self.target]]
+        cols.remove('date')
+        df_raw = df_raw[['date'] + cols + [self.target]]
         # print(cols)
         num_train = int(len(df_raw) * 0.7)
         num_test = int(len(df_raw) * 0.2)
@@ -61,7 +63,7 @@ class Dataset_Custom(Dataset):
         border2 = border2s[self.set_type]
 
         if self.features == 'M' or self.features == 'MS':
-            cols_data = df_raw.columns[1:]
+            cols_data = df_raw.columns[1:]  # 去掉date
             df_data = df_raw[cols_data]
 
         elif self.features == 'S':
@@ -136,10 +138,12 @@ class Dataset_Pred(Dataset):
         if self.cols:
             cols = self.cols.copy()
             cols.remove(self.target)
+
         else:
             cols = list(df_raw.columns)
             cols.remove(self.target)
             cols.remove('date')
+
         df_raw = df_raw[['date'] + cols + [self.target]]
         border1 = len(df_raw) - self.seq_len
         border2 = len(df_raw)
@@ -147,12 +151,14 @@ class Dataset_Pred(Dataset):
         if self.features == 'M' or self.features == 'MS':
             cols_data = df_raw.columns[1:]
             df_data = df_raw[cols_data]
+
         elif self.features == 'S':
             df_data = df_raw[[self.target]]
 
         if self.scale:
             self.scaler.fit(df_data.values)
             data = self.scaler.transform(df_data.values)
+
         else:
             data = df_data.values
 
@@ -170,6 +176,7 @@ class Dataset_Pred(Dataset):
             df_stamp['minute'] = df_stamp.date.apply(lambda row: row.minute, 1)
             df_stamp['minute'] = df_stamp.minute.map(lambda x: x // 15)
             data_stamp = df_stamp.drop(['date'], 1).values
+
         elif self.timeenc == 1:
             data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
             data_stamp = data_stamp.transpose(1, 0)
@@ -177,8 +184,10 @@ class Dataset_Pred(Dataset):
         self.data_x = data[border1:border2]
         if self.inverse:
             self.data_y = df_data.values[border1:border2]
+
         else:
             self.data_y = data[border1:border2]
+
         self.data_stamp = data_stamp
 
     def __getitem__(self, index):
@@ -190,8 +199,10 @@ class Dataset_Pred(Dataset):
         seq_x = self.data_x[s_begin:s_end]
         if self.inverse:
             seq_y = self.data_x[r_begin:r_begin + self.label_len]
+
         else:
             seq_y = self.data_y[r_begin:r_begin + self.label_len]
+
         seq_x_mark = self.data_stamp[s_begin:s_end]
         seq_y_mark = self.data_stamp[r_begin:r_end]
 

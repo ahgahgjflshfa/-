@@ -1,6 +1,6 @@
 from data_provider.data_factory import data_provider
 from exp.exp_basic import Exp_Basic
-from models.SegRNN import SegRNN
+from models import LSTM, SegRNN
 from utils.tools import EarlyStopping, adjust_learning_rate, visual, test_params_flop
 from utils.metrics import metric
 
@@ -22,7 +22,12 @@ class Exp_Main(Exp_Basic):
         super(Exp_Main, self).__init__(args)
 
     def _build_model(self):
-        model = SegRNN(self.args).float()
+        model_dict = {
+            'SegRNN': SegRNN,
+            'LSTM': LSTM
+        }
+
+        model = model_dict[self.args.model].Model(self.args).float()
 
         if self.args.use_multi_gpu and self.args.use_gpu:
             model = nn.DataParallel(model, device_ids=self.args.device_ids)
@@ -55,7 +60,7 @@ class Exp_Main(Exp_Basic):
         total_loss = []
         self.model.eval()
         with torch.no_grad():
-            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(vali_loader):
+            for i, (batch_x, batch_y) in enumerate(vali_loader):
                 batch_x = batch_x.float().to(self.device)
                 batch_y = batch_y.float()
 
@@ -84,10 +89,6 @@ class Exp_Main(Exp_Basic):
         return total_loss
 
     def train(self, setting):
-        # if self.args.load_pretrained:
-        #     print(f"Loading pretrained weights from {self.args.pretrained_path}\n")
-        #     self.model.load_pretrained_weights(self.args.pretrained_path)
-
         train_data, train_loader = self._get_data(flag='train')
         vali_data, vali_loader = self._get_data(flag='val')
         test_data, test_loader = self._get_data(flag='test')

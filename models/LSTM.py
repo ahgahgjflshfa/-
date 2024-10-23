@@ -1,66 +1,61 @@
 import torch
 from torch import nn
 
-class LSTMModel(nn.Module):
-    def __init__(
-        self,
-        input_size,
-        hidden_size1,
-        hidden_size2,
-        hidden_size3,
-        num_layers,
-        output_size,
-    ):
-        super(LSTMModel, self).__init__()
+class Model(nn.Module):
+    def __init__(self, configs):
+        super(Model, self).__init__()
 
-        # Define the input size, hidden size, and number of layers
-        self.hidden_size1 = hidden_size1
-        self.hidden_size2 = hidden_size2
-        self.hidden_size3 = hidden_size3
-        self.num_layers = num_layers
-        self.output_size = output_size
-        self.output_features = 2  # Predict temperature and rainfall
+        # 獲取配置參數
+        self.seq_len = configs.seq_len
+        self.pred_len = configs.pred_len
+        self.enc_in = configs.enc_in
+        self.d_model = configs.d_model
+        self.dropout = configs.dropout
 
-        # Define the LSTM layers with fixed sizes
+        self.output_features = 2  # 預測溫度和降雨量
+        self.seg_len = configs.seg_len
+        self.seg_num_x = self.seq_len // self.seg_len
+        self.seg_num_y = self.pred_len // self.seg_len
+
+        # 定義 LSTM 層
         self.lstm1 = nn.LSTM(
-            input_size=input_size,
-            hidden_size=hidden_size1,
-            num_layers=num_layers,
+            input_size=self.enc_in,  # 根據 configs.enc_in
+            hidden_size=self.d_model,
+            num_layers=1,  # 可以根據需求調整
             batch_first=True
-        )  # First LSTM layer
+        )
         self.lstm2 = nn.LSTM(
-            input_size=hidden_size1,
-            hidden_size=hidden_size2,
-            num_layers=num_layers,
+            input_size=self.d_model,
+            hidden_size=self.d_model,
+            num_layers=1,
             batch_first=True
-        ) # Second LSTM layer
+        )
         self.lstm3 = nn.LSTM(
-            input_size=hidden_size2,
-            hidden_size=hidden_size3,
-            num_layers=num_layers,
+            input_size=self.d_model,
+            hidden_size=self.d_model,
+            num_layers=1,
             batch_first=True
-        ) # Third LSTM layer
+        )
 
-        # Define the fully connected output layer (Dense layer)
-        self.dense = nn.Linear(hidden_size3, output_size * self.output_features)
+        # 定義全連接輸出層
+        self.dense = nn.Sequential(
+            nn.Dropout(self.dropout),
+            nn.Linear(self.d_model, self.seg_len * self.output_features)  # 與第二個模型相同
+        )
 
     def forward(self, x):
-        # Initialize hidden and cell states for each layer
-        h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size1).to(x.device)
-        c0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size1).to(x.device)
-        h1 = torch.zeros(self.num_layers, x.size(0), self.hidden_size2).to(x.device)
-        c1 = torch.zeros(self.num_layers, x.size(0), self.hidden_size2).to(x.device)
-        h2 = torch.zeros(self.num_layers, x.size(0), self.hidden_size3).to(x.device)
-        c2 = torch.zeros(self.num_layers, x.size(0), self.hidden_size3).to(x.device)
+        # 初始化隱藏狀態和記憶狀態
+        h0 = torch.zeros(1, x.size(0), self.d_model).to(x.device)
+        c0 = torch.zeros(1, x.size(0), self.d_model).to(x.device)
 
-        # Forward propagate LSTM
+        # 正向傳播
         x1, _ = self.lstm1(x, (h0.detach(), c0.detach()))
-        x2, _ = self.lstm2(x1, (h1.detach(), c1.detach()))
-        out, _ = self.lstm3(x2, (h2.detach(), c2.detach()))
+        x2, _ = self.lstm2(x1, (h0.detach(), c0.detach()))
+        out, _ = self.lstm3(x2, (h0.detach(), c0.detach()))
 
-        # Pass the output of the last LSTM layer to the fully connected layer
+        # 全連接層處理
         out = self.dense(out[:, -1, :])
 
-        # Reshape output to [batch_size, output_size, 2] where 2 is for temperature and rainfall
-        out = out.view(-1, self.output_size, self.output_features)
+        # Reshape 成 [batch_size, pred_len, enc_in]
+        out = out.view(-1, self.seg_num_y * self.seg_len, self.output_features)
         return out

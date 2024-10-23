@@ -15,14 +15,14 @@ def main():
         root_path="./dataset/",
         data_path="weather.csv",
         features="M",
-        target="fact_temperature",        # 这里你需要确保目标列存在，并且改成你需要预测的特征   # TODO: 逼逼
+        target="rain (mm)",        # 这里你需要确保目标列存在，并且改成你需要预测的特征
         freq="h",
         checkpoints="./checkpoints/",
         seq_len=720,
         label_len=0,
         pred_len=96,
         seg_len=48,         # 要跟著 pred_len 一起改動
-        enc_in=130, # 修改为你的特征数量? 就靠報錯了吧 我不知道這到底要怎麼算...
+        enc_in=17,          # 修改为你的特征数量?
         d_model=512,
         dropout=0.5,
         do_predict=False,
@@ -31,7 +31,7 @@ def main():
         batch_size=64,
         patience=10,
         learning_rate=0.0001,
-        loss="mae",
+        loss="l1",
         lradj="type3",
         pct_start=0.3,
         use_amp=False,
@@ -39,14 +39,18 @@ def main():
         gpu=0,
         use_multi_gpu=False,
         devices="0,1",
-        test_flop=False
+        test_flop=False,
+        itr=1,
+        rnn_type="gru",
+        dec_way="pmf",
+        des="test",
     )
 
     # 設定隨機種子
-    fix_seed = args.random_seed
-    random.seed(fix_seed)
-    torch.manual_seed(fix_seed)
-    np.random.seed(fix_seed)
+    # fix_seed = args.random_seed
+    # random.seed(fix_seed)
+    # torch.manual_seed(fix_seed)
+    # np.random.seed(fix_seed)
 
     args.use_gpu = True if torch.cuda.is_available() and args.use_gpu else False
 
@@ -106,7 +110,9 @@ def main():
             args.dec_way,
             args.seg_len,
             args.loss,
-            args.des, ii)
+            args.des,
+            ii
+        )
 
         exp = Exp(args)  # 設定實驗
         print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))

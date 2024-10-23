@@ -3,19 +3,20 @@ from torch.utils.data import DataLoader
 
 def data_provider(args, flag):
     Data = Dataset_Custom
-    timeenc = 0 if args.embed != 'timeF' else 1
 
     if flag == 'test':
         shuffle_flag = False
         drop_last = False  # fix bug
         batch_size = args.batch_size
         freq = args.freq
+
     elif flag == 'pred':
         shuffle_flag = False
         drop_last = False
         batch_size = 1
         freq = args.freq
         Data = Dataset_Pred
+
     else:
         shuffle_flag = True
         drop_last = True
