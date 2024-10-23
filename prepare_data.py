@@ -1,8 +1,6 @@
 import os
 import time
 import shutil
-import numpy as np
-import argparse
 import pandas as pd
 from pathlib import Path
 from sklearn.model_selection import train_test_split
@@ -12,6 +10,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import Select
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from datetime import datetime, timedelta
 
 class DataIncorrectError(Exception):
     def __init__(self, messages):
@@ -19,7 +18,7 @@ class DataIncorrectError(Exception):
 
 def download_data(
     start_date: str,
-    n: int=1,
+    end_date: str,
     driver_path: str | Path=Path("./driver/msedgedriver.exe"),
     dir_name: str="download"
 ):
@@ -41,6 +40,13 @@ def download_data(
     MONTH_NAMES = ["January", "February", "March", "April", "May", "June",
                    "July", "August", "September", "October", "November", "December"]
 
+    # Convert start_date and end_date to datetime objects
+    start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+    end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+
+    if start_dt > end_dt:
+        raise ValueError("The start date cannot be after the end date.")
+
     START_YEAR = start_date[:4]
     START_MONTH = MONTH_NAMES[int(start_date[5:7]) - 1]
     START_DAY = start_date[8:].lstrip("0")    # delete leading zero
@@ -51,9 +57,9 @@ def download_data(
     # Set options
     ie_options = webdriver.EdgeOptions()
 
-    # # Creates download directory if it doesn't exist
-    # if not os.path.exists('download'):
-    #     os.makedirs('download')
+    # Enable headless mode
+    ie_options.add_argument("headless")
+    ie_options.add_argument("disable-gpu")
 
     # Set default download directory
     cur_dir = os.getcwd()
@@ -140,133 +146,179 @@ def download_data(
     )
     day_element.click()
 
-    for _ in range(n):
+    # Iterate over the date range
+    current_date = start_dt
+
+    while current_date <= end_dt:
         # download csv to Downloads
         download_button_element = WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.XPATH, '/html/body/div/main/div/div/section[2]/div/div/section/div[5]/div[1]/div[2]/div'))
         )
         download_button_element.click()
 
+        # time.sleep(0.5)   # wait for download to complete
+
+        next_page_element = driver.find_element(By.XPATH, "/html/body/div/main/div/div/section[2]/div/div/section/div[5]/div[1]/div[1]/label/div/div[4]")
+        next_page_element.click()
+
+        # Move to the next date
+        current_date += timedelta(days=1)
+
         time.sleep(0.5)
-
-        prev_page_element = driver.find_element(By.XPATH, "/html/body/div/main/div/div/section[2]/div/div/section/div[5]/div[1]/div[1]/label/div/div[1]")
-        prev_page_element.click()
-
-        time.sleep(1)   # wait for download to complete
 
     driver.quit()
 
+
+# 定義 weather.csv 中的目標特徵
+proper_columns = [
+    'date', 'longitude', 'latitude', 'month', 'season', 'StnPres', 'T (degC)', 'Tpot (K)', 'Tdew (degC)', 'rh (%)',
+    'VPmax (mbar)', 'VPact (mbar)', 'VPdef (mbar)', 'sh (g/kg)', 'H2OC (mmol/mol)', 'wv (m/s)', 'wd (deg)',
+    'rain (mm)'
+]
+
+
 def process_file(file_path: Path):
-    year, month, day = file_path.name.rstrip(".csv").split("-")[1:]
+    try:
+        year, month, day = file_path.name.rstrip(".csv").split("-")[1:]
 
-    proper_columns = ['ObsTime', "Temperature", "Dew", "RH", "Precp", "WS", "WD", "StnPres",
-             'Month_01', 'Month_02', 'Month_03', 'Month_04', 'Month_05', 'Month_06', 'Month_07', 'Month_08',
-             'Month_09', 'Month_10', 'Month_11', 'Month_12', 'PrecpType']
+        # 讀取 CSV 文件
+        df = pd.read_csv(file_path, skiprows=1, na_values=['--', '\\', '/', '&', 'X', ' '])
 
-    # Read csv file
-    df = pd.read_csv(file_path, skiprows=1, na_values=['--', '\\', '/', '&', 'X', ' '])  # fucking stupid
+        # 新增經緯度欄位，並填入固定的經緯度值
+        df['longitude'] = 121.3232
+        df['latitude'] = 24.9924
 
-    df['Dew'] = df['Temperature'] - (100 - df['RH']) / 5  # Dew point
-    df['Month'] = month  # Date
-    df['PrecpType'] = df['Precp'].apply(lambda x: 1 if x > 0.2 else 0)
+        # 修正 ObsTime 中的 24 為 00 並且日期增加一天
+        df['ObsDate'] = f"{year}-{month}-{day}"
+        df['ObsTime'] = df['ObsTime'].astype(str)
 
-    month_dummies = ['Month_01', 'Month_02', 'Month_03', 'Month_04', 'Month_05', 'Month_06', 'Month_07', 'Month_08',
-               'Month_09', 'Month_10', 'Month_11', 'Month_12']
+        # 處理 "24" 的情況，將其替換為 "00" 並將日期加一天
+        mask_24 = df['ObsTime'] == "24"
+        if mask_24.any():
+            df.loc[mask_24, 'ObsTime'] = "00"
+            df.loc[mask_24, 'ObsDate'] = pd.to_datetime(df.loc[mask_24, 'ObsDate']) + pd.Timedelta(days=1)
 
-    for m, dummy in enumerate(month_dummies):
-        df[dummy] = df['Month'].apply(lambda x: True if int(x) == m + 1 else False)
+        # 確保 ObsDate 是 datetime 類型，並轉換為字符串格式
+        df['ObsDate'] = pd.to_datetime(df['ObsDate']).dt.strftime("%Y-%m-%d")
 
+        # 確保 ObsTime 總是兩位數格式（如 "1" 轉換為 "01"）
+        df['ObsTime'] = df['ObsTime'].str.zfill(2)
+
+        # 合併日期和時間，生成完整的日期時間列
+        df['date'] = pd.to_datetime(df['ObsDate'] + " " + df['ObsTime'] + ":00", format="%Y-%m-%d %H:%M")
+
+        # 新增月份欄位
+        df['month'] = df['date'].dt.month
+
+        # 新增季節欄位
+        df['season'] = df['date'].dt.month % 12 // 3 + 1
+
+    except ValueError:
+        # 讀取 CSV 文件
+        df = pd.read_csv(file_path, skiprows=0, na_values=['--', '\\', '/', '&', 'X', ' '])
+
+    # 添加溫度相關特徵
+    df['T (degC)'] = df['Temperature']
+
+    df['Tpot (K)'] = df['Temperature'] + 273.15  # 假設 Tpot 是絕對溫度
+    df['Tdew (degC)'] = df['Temperature'] - (100 - df['RH']) / 5  # 估算露點溫度
+
+    # 相對濕度
+    df['rh (%)'] = df['RH']
+
+    # 計算 VPmax, VPact, VPdef
+    df['VPmax (mbar)'] = 6.11 * 10**(7.5 * df['Temperature'] / (237.3 + df['Temperature']))
+    df['VPact (mbar)'] = df['VPmax (mbar)'] * (df['RH'] / 100)
+    df['VPdef (mbar)'] = df['VPmax (mbar)'] - df['VPact (mbar)']
+
+    # 比濕計算（假設為常數換算）
+    df['sh (g/kg)'] = 0.622 * df['VPact (mbar)'] / (df['StnPres'] - df['VPact (mbar)']) * 1000
+
+    # 水蒸氣濃度計算
+    df['H2OC (mmol/mol)'] = df['sh (g/kg)'] / 18.02 * 1000  # 假設分子量為 18.02
+
+    # 風速和風向
+    df['wv (m/s)'] = df['WS']
+    df['wd (deg)'] = df['WD']
+
+    # 雨量和下雨狀況
+    df['rain (mm)'] = df['Precp']
+
+    # 只保留目標列
     df = df[proper_columns]
 
-    # Fill NaN values with mean, forward data, or backward data
-    for i, column in enumerate(df.columns):
-        # Check if the data downloaded aren't the right data
-        if column not in proper_columns:
-            raise DataIncorrectError(f"Should not have data column {column}")
+    # 填補缺失值
+    for column in df.columns:
+        if pd.api.types.is_numeric_dtype(df[column]):
+            if df[column].isna().all():
+                df[column].fillna(0, inplace=True)
+            else:
+                df[column].fillna(df[column].mean(), inplace=True)
 
-        # Fill entire column NaNs with mean or 0 if the entire column is NaN
-        if df[column].isna().all():
-            df[column].fillna(0, inplace=True)
-        else:
-            df[column].fillna(df[column].mean(), inplace=True)
+    # 將 StnPres 列名更改為 p (mbar)
+    df.rename(columns={'StnPres': 'p (mbar)'}, inplace=True)
 
-    return (year, month, day), df.round(2)
+    return df.round(2)
 
-def split_data(test_size: float, path: str="download"):
-    data_path = Path(path)
-    train_dir = Path('data/train')
-    test_dir = Path('data/test')
 
-    if train_dir.exists():
-        shutil.rmtree(train_dir)
 
-    if test_dir.exists():
-        shutil.rmtree(test_dir)
+def save_to_weather_csv(input_directory, output_file, start_date=None, end_date=None):
+    combined_df = pd.DataFrame()
+    input_directory = Path(input_directory)
+    file_paths = list(input_directory.glob("*.csv"))
 
-    # Create train and test directories if they don't exist
-    train_dir.mkdir(parents=True, exist_ok=True)
-    test_dir.mkdir(parents=True, exist_ok=True)
+    # 如果 start_date 和 end_date 不為空，將它們轉換為 datetime 格式
+    if start_date:
+        start_date = pd.to_datetime(start_date)
+    if end_date:
+        end_date = pd.to_datetime(end_date)
 
-    # List all CSV files in the data directory
-    csv_files = list(data_path.glob("*.csv"))
+    for file_path in file_paths:
+        # 提取檔案名中的日期部分，例如 'C0C480-2009-06-22.csv' 中的 '2009-06-22'
+        date_parts = file_path.stem.split('-')[-3:]  # 提取['2009', '06', '22']
+        file_date_str = '-'.join(date_parts)  # 合併成 '2009-06-22'
+        file_date = pd.to_datetime(file_date_str, format='%Y-%m-%d')  # 轉換為 datetime
 
-    train_files, test_files = train_test_split(csv_files, test_size=test_size, shuffle=True)
+        # 日期篩選邏輯：僅在 start_date 或 end_date 存在的情況下進行過濾
+        if (start_date and file_date < start_date) or (end_date and file_date > end_date):
+            continue  # 跳過不在範圍內的檔案
 
-    for file in train_files:
-        try:
-            (year, month, day), df = process_file(file)
-        except pd.errors.EmptyDataError or DataIncorrectError as e:
-            print(f"File {file} is empty or incorrect: {e}")
-            continue
+        # 處理符合條件的檔案
+        df = process_file(file_path)
+        combined_df = pd.concat([combined_df, df], ignore_index=True)
 
-        # Check if file already exists
-        if (train_dir / f"{year}-{month}-{day}.csv").exists():
-            (train_dir / f"{year}-{month}-{day}.csv").unlink()
+    # 將篩選後的資料保存為 CSV
+    combined_df.to_csv(output_file, index=False)
 
-        # Write file
-        df.to_csv(train_dir / f"{year}-{month}-{day}.csv", index=False)
-
-    for file in test_files:
-        try:
-            (year, month, day), df = process_file(file)
-        except pd.errors.EmptyDataError as _:
-            print(f"File {file} is empty or incorrect.")
-            continue
-
-        # Check if file already exists
-        if (test_dir / f"{year}-{month}-{day}.csv").exists():
-            (test_dir / f"{year}-{month}-{day}.csv").unlink()
-
-        # Write file
-        df.to_csv(test_dir / f"{year}-{month}-{day}.csv", index=False)
-
-    print(f'Saved {len(train_files)} files to {train_dir}')
-    print(f'Saved {len(test_files)} files to {test_dir}')
 
 def prepare_data(
-    date: str="",
-    n: int=1,
-    test_size: float=0.2,
+    download: bool=False,
+    start_date: str= "",
+    end_date: str="",
     dir_name:str="download",
-    split: bool=True
+    output_file="./dataset/weather.csv"
 ):
     """
 
     Args:
-        date (optional): Starting date. If no value pass, data won't be downloaded.
-        n (optional): Number of datas to download. Default is 1.
-        test_size (optional): Ratio of train data and test data. Default is 0.2
-        dir_name (optional): Directory to put downloaded files. Default is `download`
-        split (optional): Split data or not.
+        download (optional): Download or not.
+        start_date (optional): Starting date. If no value pass, data won't be downloaded.
+        end_date (optional): Ending date.
+        dir_name (optional): Directory to put downloaded files. Default is `download`.
+        output_file (optional): Where to save output data. Default is `dataset/weather.csv`
 
     Returns:
         None
-    """
-    if date:
-        download_data(start_date=date, n=n, dir_name=dir_name)
 
-    if split:
-        split_data(test_size=test_size)
+    Outputs:
+        How many features in dataset.
+    """
+    if download:
+        download_data(start_date=start_date, end_date=end_date, dir_name=dir_name)
+
+    save_to_weather_csv(input_directory=dir_name, output_file=output_file, start_date=start_date, end_date=end_date)
+
+    print(f"{len(proper_columns)} features.")
 
 if __name__ == "__main__":
 
