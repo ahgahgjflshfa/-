@@ -1,33 +1,40 @@
 import torch
 import torch.nn as nn
 
+import torch
+import torch.nn as nn
+
 class Model(nn.Module):
     def __init__(self, configs):
         super(Model, self).__init__()
 
         # get parameters
-        self.seq_len = configs.seq_len
-        self.pred_len = configs.pred_len
-        self.enc_in = configs.enc_in
-        self.d_model = configs.d_model
-        self.dropout = configs.dropout
+        self.seq_len = configs.seq_len  # 輸入的序列長度
+        self.pred_len = configs.pred_len  # 預測的序列長度
+        self.enc_in = configs.enc_in  # 輸入特徵數
+        self.enc_out = configs.enc_out # 輸出
+        self.d_model = configs.d_model  # 隱藏層維度
+        self.dropout = configs.dropout  # dropout 機率
 
-        self.seg_len = configs.seg_len
-        self.seg_num_x = self.seq_len//self.seg_len
-        self.seg_num_y = self.pred_len // self.seg_len
-
+        # Segmentation 設定
+        self.seg_len = configs.seg_len  # 每個 segment 的長度
+        self.seg_num_x = self.seq_len // self.seg_len  # 輸入的 segment 數量
+        self.seg_num_y = self.pred_len  # 預測的時間步長
 
         self.valueEmbedding = nn.Sequential(
             nn.Linear(self.seg_len, self.d_model),
             nn.ReLU()
         )
         self.rnn = nn.GRU(input_size=self.d_model, hidden_size=self.d_model, num_layers=1, bias=True,
-                              batch_first=True, bidirectional=False)
+                          batch_first=True, bidirectional=False)
         self.pos_emb = nn.Parameter(torch.randn(self.seg_num_y, self.d_model // 2))
-        self.channel_emb = nn.Parameter(torch.randn(self.enc_in, self.d_model // 2))
+        self.channel_emb = nn.Parameter(torch.randn(self.enc_out, self.d_model // 2))
+
+        # 修改這裡的輸出層，使其輸出 1 個降雨機率
         self.predict = nn.Sequential(
             nn.Dropout(self.dropout),
-            nn.Linear(self.d_model, self.seg_len)
+            nn.Linear(self.d_model, 1),
+            nn.Sigmoid()
         )
 
     def forward(self, x):
@@ -37,35 +44,26 @@ class Model(nn.Module):
 
         # normalization and permute     b,s,c -> b,c,s
         seq_last = x[:, -1:, :].detach()
-        x = (x - seq_last).permute(0, 2, 1) # b,c,s
+        x = x.permute(0, 2, 1)  # b,c,s
 
         # segment and embedding    b,c,s -> bc,n,w -> bc,n,d
         x = self.valueEmbedding(x.reshape(-1, self.seg_num_x, self.seg_len))
 
         # encoding
-        _, hn = self.rnn(x) # bc,n,d  1,bc,d
+        _, hn = self.rnn(x)  # bc,n,d  1,bc,d
 
-        # m,d//2 -> 1,m,d//2 -> c,m,d//2
-        # c,d//2 -> c,1,d//2 -> c,m,d//2
-        # c,m,d -> cm,1,d -> bcm, 1, d
-
+        # 生成位置和通道嵌入
         pos_emb = torch.cat([
-            self.pos_emb.unsqueeze(0).repeat(self.enc_in, 1, 1),
+            self.pos_emb.unsqueeze(0).repeat(self.enc_out, 1, 1),  # out feature, 1, 1
             self.channel_emb.unsqueeze(1).repeat(1, self.seg_num_y, 1)
-        ], dim=-1).view(-1, 1, self.d_model).repeat(batch_size, 1, 1)
+        ], dim=-1).view(-1, 1, self.d_model).repeat(batch_size, 1, 1)   # bcm, 1, d
 
-        # print(f"hn shape: {hn.shape}")
-        # print(f"pos_emb shape: {pos_emb.shape}")
+        # RNN 處理
+        _, hy = self.rnn(pos_emb, hn.repeat(1, 1, self.seg_num_y // (self.enc_in // self.enc_out)).view(1, -1, self.d_model))  # bcm,1,d  1,bcm,d
 
-        _, hy = self.rnn(pos_emb, hn.repeat(1, 1, self.seg_num_y).view(1, -1, self.d_model)) # bcm,1,d  1,bcm,d
+        # 使用 self.predict 預測，並將形狀調整為 (batch_size, pred_len, 1)
+        y = self.predict(hy).view(batch_size, self.enc_out, self.pred_len)  # 調整輸出形狀為 (b, pred_len, 1)
 
-        # 1,bcm,d -> 1,bcm,w -> b,c,s
-        y = self.predict(hy).view(-1, self.enc_in, self.pred_len)
-
-        # print(f"Shape of y: {y.shape}")
-        # print(f"Shape of seq_last: {seq_last.shape}")
-
-        # permute and denorm
-        y = y.permute(0, 2, 1) + seq_last
+        y = y.permute(0, 2, 1)
 
         return y

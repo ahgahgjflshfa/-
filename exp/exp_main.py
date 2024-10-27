@@ -51,6 +51,9 @@ class Exp_Main(Exp_Basic):
         elif self.args.loss == "mse":
             criterion = nn.MSELoss()
 
+        elif self.args.loss == "bce":
+            criterion = nn.BCELoss()
+
         else:
             criterion = nn.L1Loss()
 
@@ -145,6 +148,11 @@ class Exp_Main(Exp_Basic):
                     f_dim = -1 if self.args.features == 'MS' else 0
                     outputs = outputs[:, -self.args.pred_len:, f_dim:]
                     batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
+
+                    # print(nn.Sigmoid(batch_y))
+                    #
+                    # print(outputs)
+
                     loss = criterion(outputs, batch_y)
                     train_loss.append(loss.item())
 
@@ -237,9 +245,9 @@ class Exp_Main(Exp_Basic):
                 if i % 20 == 0:
                     input = batch_x.detach().cpu().numpy()
 
-                    pred = test_data.inverse_transform(outputs[0])
-                    true = test_data.inverse_transform(batch_y[0])
-                    input = test_data.inverse_transform(input[0])
+                    pred = outputs[0]
+                    true = batch_y[0]
+                    input = input[0]
 
                     gt = np.concatenate((input[:, -1], true[:, -1]), axis=0)
                     pd = np.concatenate((input[:, -1], pred[:, -1]), axis=0)
@@ -299,12 +307,12 @@ class Exp_Main(Exp_Basic):
                     with torch.cuda.amp.autocast():
                         outputs = self.model(batch_x)   # Scaled
 
-                        original_prediction = pred_data.inverse_transform(outputs)
+                        original_prediction = outputs
 
                 else:
                     outputs = self.model(batch_x)   # Scaled
 
-                    original_prediction = pred_data.inverse_transform(outputs)
+                    original_prediction = outputs
 
                 pred = original_prediction.detach().cpu().numpy()  # .squeeze()
                 preds.append(pred)

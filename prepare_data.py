@@ -169,24 +169,12 @@ def download_data(
     driver.quit()
 
 
-# 定義 weather.csv 中的目標特徵
-proper_columns = [
-    'date', 'longitude', 'latitude', 'month', 'season', 'StnPres', 'T (degC)', 'Tpot (K)', 'Tdew (degC)', 'rh (%)',
-    'VPmax (mbar)', 'VPact (mbar)', 'VPdef (mbar)', 'sh (g/kg)', 'H2OC (mmol/mol)', 'wv (m/s)', 'wd (deg)',
-    'rain (mm)'
-]
-
-
 def process_file(file_path: Path):
     try:
         year, month, day = file_path.name.rstrip(".csv").split("-")[1:]
 
         # 讀取 CSV 文件
         df = pd.read_csv(file_path, skiprows=1, na_values=['--', '\\', '/', '&', 'X', ' '])
-
-        # 新增經緯度欄位，並填入固定的經緯度值
-        df['longitude'] = 121.3232
-        df['latitude'] = 24.9924
 
         # 修正 ObsTime 中的 24 為 00 並且日期增加一天
         df['ObsDate'] = f"{year}-{month}-{day}"
@@ -207,59 +195,65 @@ def process_file(file_path: Path):
         # 合併日期和時間，生成完整的日期時間列
         df['date'] = pd.to_datetime(df['ObsDate'] + " " + df['ObsTime'] + ":00", format="%Y-%m-%d %H:%M")
 
-        # 新增月份欄位
-        df['month'] = df['date'].dt.month
-
-        # 新增季節欄位
-        df['season'] = df['date'].dt.month % 12 // 3 + 1
-
     except ValueError:
         # 讀取 CSV 文件
         df = pd.read_csv(file_path, skiprows=0, na_values=['--', '\\', '/', '&', 'X', ' '])
 
-    # 添加溫度相關特徵
-    df['T (degC)'] = df['Temperature']
+    # 添加所需的特徵
+    df['T (degC)'] = df['Temperature']  # 溫度
+    df['rh (%)'] = df['RH']  # 相對濕度
+    df['wd (deg)'] = df['WD']  # 風向
+    df['p (mbar)'] = df['StnPres']  # 氣壓
+    df['rain (mm)'] = df['Precp']  # 雨量
 
-    df['Tpot (K)'] = df['Temperature'] + 273.15  # 假設 Tpot 是絕對溫度
-    df['Tdew (degC)'] = df['Temperature'] - (100 - df['RH']) / 5  # 估算露點溫度
+    # 只保留所需的特徵
+    df = df[['date', 'p (mbar)', 'T (degC)', 'wd (deg)', 'rh (%)', 'rain (mm)']]
 
-    # 相對濕度
-    df['rh (%)'] = df['RH']
+    # 將時間按 6 小時分組
+    df['6h_period'] = (df['date'].dt.hour // 6) % 4  # 將每個日期時間按 6 小時的間隔分組
 
-    # 計算 VPmax, VPact, VPdef
-    df['VPmax (mbar)'] = 6.11 * 10**(7.5 * df['Temperature'] / (237.3 + df['Temperature']))
-    df['VPact (mbar)'] = df['VPmax (mbar)'] * (df['RH'] / 100)
-    df['VPdef (mbar)'] = df['VPmax (mbar)'] - df['VPact (mbar)']
+    # 將 6h_period 映射為易於理解的時間段標示，並處理 00:00 的跨日問題
+    period_labels = {0: '深夜', 1: '早上', 2: '下午', 3: '晚上'}
+    df['6h_period'] = df['6h_period'].map(period_labels)
 
-    # 比濕計算（假設為常數換算）
-    df['sh (g/kg)'] = 0.622 * df['VPact (mbar)'] / (df['StnPres'] - df['VPact (mbar)']) * 1000
+    # 調整 00:00 時間屬於前一天的「深夜」
+    midnight_mask = (df['date'].dt.hour == 0)
+    df.loc[midnight_mask, '6h_period'] = '深夜'
+    df.loc[midnight_mask, 'date'] = df.loc[midnight_mask, 'date'] - pd.Timedelta(days=1)
 
-    # 水蒸氣濃度計算
-    df['H2OC (mmol/mol)'] = df['sh (g/kg)'] / 18.02 * 1000  # 假設分子量為 18.02
+    # 創建新的日期標示（只保留年月日，無具體時間）
+    # df['day'] = df['date'].dt.date
 
-    # 風速和風向
-    df['wv (m/s)'] = df['WS']
-    df['wd (deg)'] = df['WD']
+    # 按日期和 6 小時時間段進行分組，計算每個時間段的平均值
+    grouped_df = df.groupby(['6h_period']).mean().reset_index()
 
-    # 雨量和下雨狀況
-    df['rain (mm)'] = df['Precp']
+    # 設定正確的時間段排序順序
+    period_order = ['深夜', '早上', '下午', '晚上']
+    grouped_df['6h_period'] = pd.Categorical(grouped_df['6h_period'], categories=period_order, ordered=True)
 
-    # 只保留目標列
-    df = df[proper_columns]
+    # 按日期和時間段排序
+    grouped_df = grouped_df.sort_values(by=['6h_period', 'date'])
+
+    # 將 `day` 列重命名為 `date`，以符合原始要求
+    # grouped_df.rename(columns={'day': 'date'}, inplace=True)
 
     # 填補缺失值
-    for column in df.columns:
-        if pd.api.types.is_numeric_dtype(df[column]):
-            if df[column].isna().all():
-                df[column].fillna(0, inplace=True)
+    for column in grouped_df.columns:
+        if pd.api.types.is_numeric_dtype(grouped_df[column]):
+            if grouped_df[column].isna().all():
+                grouped_df[column].fillna(0, inplace=True)
             else:
-                df[column].fillna(df[column].mean(), inplace=True)
+                grouped_df[column].fillna(grouped_df[column].mean(), inplace=True)
 
-    # 將 StnPres 列名更改為 p (mbar)
-    df.rename(columns={'StnPres': 'p (mbar)'}, inplace=True)
+    grouped_df = grouped_df.round(2)
 
-    return df.round(2)
+    grouped_df = grouped_df.drop(grouped_df.columns[1], axis=1)
 
+    grouped_df['rain_prob'] = (grouped_df['rain (mm)'] > 0).astype(int)
+
+    grouped_df = grouped_df.reset_index(drop=True)
+
+    return grouped_df
 
 
 def save_to_weather_csv(input_directory, output_file, start_date=None, end_date=None):
@@ -318,7 +312,7 @@ def prepare_data(
 
     save_to_weather_csv(input_directory=dir_name, output_file=output_file, start_date=start_date, end_date=end_date)
 
-    print(f"{len(proper_columns)} features.")
+    # print(f"{len(proper_columns)} features.")
 
 if __name__ == "__main__":
 

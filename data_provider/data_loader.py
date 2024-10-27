@@ -1,5 +1,7 @@
 import pandas as pd
+import numpy as np
 import os
+
 from torch.utils.data import Dataset
 from sklearn.preprocessing import StandardScaler
 from utils.timefeatures import time_features
@@ -47,12 +49,12 @@ class Dataset_Custom(Dataset):
         #     df_raw = pd.get_dummies(df_raw, columns=categorical_columns)
 
         '''
-        df_raw.columns: ['fact_time', ...(other features), target feature]
+        df_raw.columns: ['6h_period', ...(other features), 'rain (mm)', 'rain_prob']
         '''
         cols = list(df_raw.columns)
         cols.remove(self.target)
-        cols.remove('date')
-        df_raw = df_raw[['date'] + cols + [self.target]]
+        cols.remove('6h_period')
+        df_raw = df_raw[['6h_period'] + cols + [self.target]]
         # print(cols)
         num_train = int(len(df_raw) * 0.7)
         num_test = int(len(df_raw) * 0.2)
@@ -70,17 +72,24 @@ class Dataset_Custom(Dataset):
             df_data = df_raw[[self.target]]
 
         if self.scale:
-            train_data = df_data[border1s[0]:border2s[0]]
+            feature_data = df_data.iloc[:, :-2]     # ignore rain
+            true_label = df_data.iloc[:, -1:]
+
+            train_data = feature_data[border1s[0]:border2s[0]]
             self.scaler.fit(train_data.values)
-            # print(self.scaler.mean_)
-            # exit()
-            data = self.scaler.transform(df_data.values)
+
+            scaled_features = self.scaler.transform(feature_data.values)
+
+            data = np.hstack([scaled_features, true_label.values.reshape(-1, 1)])
 
         else:
             data = df_data.values
 
-        self.data_x = data[border1:border2]
-        self.data_y = data[border1:border2]
+        self.data_x = data[border1:border2][:, 1:]  # features
+        self.data_y = data[border1:border2][:, -1:] # rain probability
+
+        pass
+
 
     def __getitem__(self, index):
         s_begin = index
