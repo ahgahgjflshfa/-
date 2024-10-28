@@ -9,8 +9,8 @@ def main():
     args = argparse.Namespace(
         random_seed=2024,
         is_training=True,       # 記得要改
-        model_id="weather_720",
-        model="SegRNN",
+        model_id="weather_PEKO",
+        model="ESGA",
         data="custom",
         root_path="./dataset/",
         data_path="weather.csv",
@@ -18,7 +18,7 @@ def main():
         target="rain_prob",        # 这里你需要确保目标列存在，并且改成你需要预测的特征
         freq="h",
         checkpoints="./checkpoints/",
-        seq_len=120,
+        seq_len=80,
         label_len=0,
         pred_len=4,
         seg_len=2,         # 要跟著 pred_len 一起改動

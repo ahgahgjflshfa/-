@@ -1,8 +1,9 @@
 from data_provider.data_factory import data_provider
 from exp.exp_basic import Exp_Basic
-from models import LSTM, SegRNN
+from models import LSTM, SegRNN, ESegRNN_Attn
 from utils.tools import EarlyStopping, adjust_learning_rate, visual, test_params_flop
 from utils.metrics import metric
+from torchmetrics.classification import BinaryAccuracy
 
 import torch
 import torch.nn as nn
@@ -23,6 +24,7 @@ class Exp_Main(Exp_Basic):
 
     def _build_model(self):
         model_dict = {
+            'ESGA': ESegRNN_Attn,
             'SegRNN': SegRNN,
             'LSTM': LSTM
         }
@@ -61,6 +63,7 @@ class Exp_Main(Exp_Basic):
 
     def vali(self, vali_data, vali_loader, criterion):
         total_loss = []
+        total_acc = []
         self.model.eval()
         with torch.no_grad():
             for i, (batch_x, batch_y) in enumerate(vali_loader):
@@ -84,12 +87,17 @@ class Exp_Main(Exp_Basic):
 
                 loss = criterion(pred, true)
 
+                accuracy_metric = BinaryAccuracy()
+                acc = accuracy_metric(pred, true)
+
                 total_loss.append(loss)
+                total_acc.append(acc)
 
         total_loss = np.average(total_loss)
+        total_acc = np.average(total_acc)
         self.model.train()
 
-        return total_loss
+        return total_loss, total_acc
 
     def train(self, setting):
         train_data, train_loader = self._get_data(flag='train')
@@ -179,11 +187,12 @@ class Exp_Main(Exp_Basic):
 
             print("Epoch: {} cost time: {}".format(epoch + 1, time.time() - epoch_time))
             train_loss = np.average(train_loss)
-            vali_loss = self.vali(vali_data, vali_loader, criterion)
-            test_loss = self.vali(test_data, test_loader, criterion)
+            vali_loss, vali_acc = self.vali(vali_data, vali_loader, criterion)
+            test_loss, test_acc = self.vali(test_data, test_loader, criterion)
 
             print("Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: {4:.7f}".format(
                 epoch + 1, train_steps, train_loss, vali_loss, test_loss))
+            print(f"Accuracy | Vali accuracy: {vali_acc:.2f} Test accuracy: {test_acc:.2f}")
             early_stopping(vali_loss, self.model, path)
             if early_stopping.early_stop:
                 print("Early stopping")
@@ -242,7 +251,7 @@ class Exp_Main(Exp_Basic):
                 trues.append(true)
                 inputx.append(batch_x.detach().cpu().numpy())
 
-                if i % 20 == 0:
+                if i % 5 == 0:
                     input = batch_x.detach().cpu().numpy()
 
                     pred = outputs[0]

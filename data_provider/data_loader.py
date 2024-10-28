@@ -72,7 +72,7 @@ class Dataset_Custom(Dataset):
             df_data = df_raw[[self.target]]
 
         if self.scale:
-            feature_data = df_data.iloc[:, :-2]     # ignore rain
+            feature_data = df_data.iloc[:, :-1]     # ignore rain
             true_label = df_data.iloc[:, -1:]
 
             train_data = feature_data[border1s[0]:border2s[0]]
