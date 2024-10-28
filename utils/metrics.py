@@ -1,6 +1,22 @@
 import numpy as np
+import torch
 from sklearn.metrics import roc_auc_score, log_loss, precision_score, recall_score, brier_score_loss
 
+
+def flatten_inputs(pred, true):
+    # 檢查是否為 torch.Tensor，如果是則轉為 numpy
+    if isinstance(pred, torch.Tensor):
+        pred = pred.detach().cpu().numpy()
+    if isinstance(true, torch.Tensor):
+        true = true.detach().cpu().numpy()
+
+    # 將 3D 張量壓平成 1D
+    if pred.ndim == 3:
+        pred = pred.reshape(-1)
+    if true.ndim == 3:
+        true = true.reshape(-1)
+
+    return pred, true
 
 def RSE(pred, true):
     return np.sqrt(np.sum((true - pred) ** 2)) / np.sqrt(np.sum((true - true.mean()) ** 2))
@@ -34,29 +50,33 @@ def MSPE(pred, true):
 
 
 def BrierScore(pred, true):
+    # 壓平並轉換數據
+    pred, true = flatten_inputs(pred, true)
     # 將 true 標籤轉換為二元格式以便計算 Brier Score
-    true_binary = (true >= 0.5).astype(int)  # 假設 0.5 是分界線
-    return brier_score_loss(true_binary, pred)
+    return brier_score_loss(true, pred)
 
 
 def LogLoss(pred, true):
+    # 壓平並轉換數據
+    pred, true = flatten_inputs(pred, true)
     # 使用 scikit-learn 的 log_loss 函數
-    true_binary = (true >= 0.5).astype(int)
-    return log_loss(true_binary, pred)
+    return log_loss(true, pred)
 
 
 def ROCAUC(pred, true):
+    # 壓平並轉換數據
+    pred, true = flatten_inputs(pred, true)
     # 使用 scikit-learn 的 roc_auc_score 函數
-    true_binary = (true >= 0.5).astype(int)
-    return roc_auc_score(true_binary, pred)
+    return roc_auc_score(true, pred)
 
 
-def PrecisionRecall(pred, true):
+def PrecisionRecall(pred, true, threshold=0.5):
+    # 壓平並轉換數據
+    pred, true = flatten_inputs(pred, true)
     # 使用 scikit-learn 的 precision_score 和 recall_score
-    true_binary = (true >= 0.5).astype(int)
-    pred_binary = (pred >= 0.5).astype(int)
-    precision = precision_score(true_binary, pred_binary)
-    recall = recall_score(true_binary, pred_binary)
+    pred_binary = (pred >= threshold).astype(int)
+    precision = precision_score(true, pred_binary)
+    recall = recall_score(true, pred_binary)
     return precision, recall
 
 

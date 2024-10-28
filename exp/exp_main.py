@@ -1,3 +1,5 @@
+import joblib
+
 from data_provider.data_factory import data_provider
 from exp.exp_basic import Exp_Basic
 from models import LSTM, SegRNN, ESegRNN_Attn
@@ -104,6 +106,7 @@ class Exp_Main(Exp_Basic):
         vali_data, vali_loader = self._get_data(flag='val')
         test_data, test_loader = self._get_data(flag='test')
 
+        # Checkpoints
         path = os.path.join(self.args.checkpoints, setting)
         if not os.path.exists(path):
             os.makedirs(path)
@@ -281,11 +284,13 @@ class Exp_Main(Exp_Basic):
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
 
-        mae, mse, rmse, mape, mspe, rse, corr = metric(preds, trues)
-        print('mse:{}, mae:{}, ms/sample:{}'.format(mse, mae, ms))
+        results = metric(preds, trues)
+        print(f'Brier Score: {results["Brier Score"]:.2f}, ROC AUC: {results["ROC AUC"]:.2f}, '
+              f'Precision: {results["Precision"]:.2f}, Recall: {results["Recall"]:.2f}')
         f = open("result.txt", 'a')
         f.write(setting + "  \n")
-        f.write('mse:{}, mae:{}, ms/sample:{}'.format(mse, mae, ms))
+        f.write(f'Brier Score: {results["Brier Score"]:.2f}, ROC AUC: {results["ROC AUC"]:.2f}, '
+              f'Precision: {results["Precision"]:.2f}, Recall: {results["Recall"]:.2f}')
         f.write('\n')
         f.write('\n')
         f.close()

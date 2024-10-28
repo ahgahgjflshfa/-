@@ -8,8 +8,8 @@ import numpy as np
 def main():
     args = argparse.Namespace(
         random_seed=2024,
-        is_training=True,       # 記得要改
-        model_id="weather_PEKO",
+        is_training=False,       # 記得要改
+        model_id="weather_720",
         model="ESGA",
         data="custom",
         root_path="./dataset/",
@@ -18,6 +18,7 @@ def main():
         target="rain_prob",        # 这里你需要确保目标列存在，并且改成你需要预测的特征
         freq="h",
         checkpoints="./checkpoints/",
+        scaler="./scaler/",
         seq_len=80,
         label_len=0,
         pred_len=4,

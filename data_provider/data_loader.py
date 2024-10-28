@@ -1,10 +1,10 @@
 import pandas as pd
 import numpy as np
 import os
+import joblib
 
 from torch.utils.data import Dataset
 from sklearn.preprocessing import StandardScaler
-from utils.timefeatures import time_features
 import warnings
 
 warnings.filterwarnings('ignore')
@@ -41,6 +41,15 @@ class Dataset_Custom(Dataset):
 
     def __read_data__(self):
         self.scaler = StandardScaler()
+
+        # Prepare scaler
+        if self.set_type != 0:
+            if os.path.exists('./scaler/scaler.joblib'):
+                self.scaler = joblib.load('./scaler/scaler.joblib')
+            else:
+                raise ValueError("No scaler found! Please make sure you have trained the model and saved the scaler.")
+
+        # Read data
         df_raw = pd.read_csv(os.path.join(self.root_path,
                                           self.data_path))
 
@@ -54,13 +63,15 @@ class Dataset_Custom(Dataset):
         cols = list(df_raw.columns)
         cols.remove(self.target)
         cols.remove('6h_period')
-        df_raw = df_raw[['6h_period'] + cols + [self.target]]
-        # print(cols)
+        df_raw = df_raw[['6h_period'] + cols + [self.target]]       # Rearrange columns
+
         num_train = int(len(df_raw) * 0.7)
         num_test = int(len(df_raw) * 0.2)
         num_vali = len(df_raw) - num_train - num_test
-        border1s = [0, num_train - self.seq_len, len(df_raw) - num_test - self.seq_len]
-        border2s = [num_train, num_train + num_vali, len(df_raw)]
+
+        border1s = [0, num_train - self.seq_len, len(df_raw) - num_test - self.seq_len] # train, vali, test 起點
+        border2s = [num_train, num_train + num_vali, len(df_raw)]                       # train, vali, test 終點
+
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
 
@@ -72,11 +83,19 @@ class Dataset_Custom(Dataset):
             df_data = df_raw[[self.target]]
 
         if self.scale:
-            feature_data = df_data.iloc[:, :-1]     # ignore rain
+            feature_data = df_data.iloc[:, :-2]
             true_label = df_data.iloc[:, -1:]
 
-            train_data = feature_data[border1s[0]:border2s[0]]
-            self.scaler.fit(train_data.values)
+            # Fit
+            if self.set_type == 0:  # if train
+                train_data = feature_data[border1s[0]:border2s[0]]  # fit train data
+                self.scaler.fit(train_data.values)
+
+                # Save scaler
+                if not os.path.exists('./scaler/'):
+                    os.makedirs('./scaler')
+
+                joblib.dump(self.scaler, './scaler/scaler.joblib')
 
             scaled_features = self.scaler.transform(feature_data.values)
 
@@ -85,11 +104,8 @@ class Dataset_Custom(Dataset):
         else:
             data = df_data.values
 
-        self.data_x = data[border1:border2][:, 1:]  # features
-        self.data_y = data[border1:border2][:, -1:] # rain probability
-
-        pass
-
+        self.data_x = data[border1:border2][:, 1:]  # features (scaled)
+        self.data_y = data[border1:border2][:, -1:] # rain true label
 
     def __getitem__(self, index):
         s_begin = index
@@ -139,10 +155,17 @@ class Dataset_Pred(Dataset):
 
     def __read_data__(self):
         self.scaler = StandardScaler()
+
+        # Load scaler
+        if os.path.exists('./scaler/scaler.joblib'):
+            self.scaler = joblib.load('./scaler/scaler.joblib')
+        else:
+            raise ValueError("No scaler found! Please make sure you have trained the model and saved the scaler.")
+
         df_raw = pd.read_csv(os.path.join(self.root_path,
                                           self.data_path))
         '''
-        df_raw.columns: ['date', ...(other features), target feature]
+        df_raw.columns: ['6h_period', ...(other features), 'rain (mm)', 'rain_prob']
         '''
         if self.cols:
             cols = self.cols.copy()
@@ -151,9 +174,9 @@ class Dataset_Pred(Dataset):
         else:
             cols = list(df_raw.columns)
             cols.remove(self.target)
-            cols.remove('date')
+            cols.remove('6h_period')
 
-        df_raw = df_raw[['date'] + cols + [self.target]]
+        df_raw = df_raw[['6h_period'] + cols + [self.target]]
         border1 = len(df_raw) - self.seq_len
         border2 = len(df_raw)
 
@@ -165,30 +188,15 @@ class Dataset_Pred(Dataset):
             df_data = df_raw[[self.target]]
 
         if self.scale:
-            self.scaler.fit(df_data.values)
-            data = self.scaler.transform(df_data.values)
+            feature_data = df_data.iloc[:, :-2]  # ignore rain
+            true_label = df_data.iloc[:, -1:]
+
+            scaled_features = self.scaler.transform(feature_data.values)
+
+            data = np.hstack([scaled_features, true_label.values.reshape(-1, 1)])
 
         else:
             data = df_data.values
-
-        tmp_stamp = df_raw[['date']][border1:border2]
-        tmp_stamp['date'] = pd.to_datetime(tmp_stamp.date)
-        pred_dates = pd.date_range(tmp_stamp.date.values[-1], periods=self.pred_len + 1, freq=self.freq)
-
-        df_stamp = pd.DataFrame(columns=['date'])
-        df_stamp.date = list(tmp_stamp.date.values) + list(pred_dates[1:])
-        if self.timeenc == 0:
-            df_stamp['month'] = df_stamp.date.apply(lambda row: row.month, 1)
-            df_stamp['day'] = df_stamp.date.apply(lambda row: row.day, 1)
-            df_stamp['weekday'] = df_stamp.date.apply(lambda row: row.weekday(), 1)
-            df_stamp['hour'] = df_stamp.date.apply(lambda row: row.hour, 1)
-            df_stamp['minute'] = df_stamp.date.apply(lambda row: row.minute, 1)
-            df_stamp['minute'] = df_stamp.minute.map(lambda x: x // 15)
-            data_stamp = df_stamp.drop(['date'], 1).values
-
-        elif self.timeenc == 1:
-            data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
-            data_stamp = data_stamp.transpose(1, 0)
 
         self.data_x = data[border1:border2]
         if self.inverse:
@@ -197,13 +205,10 @@ class Dataset_Pred(Dataset):
         else:
             self.data_y = data[border1:border2]
 
-        self.data_stamp = data_stamp
-
     def __getitem__(self, index):
         s_begin = index
         s_end = s_begin + self.seq_len
         r_begin = s_end - self.label_len
-        r_end = r_begin + self.label_len + self.pred_len
 
         seq_x = self.data_x[s_begin:s_end]
         if self.inverse:
@@ -212,10 +217,7 @@ class Dataset_Pred(Dataset):
         else:
             seq_y = self.data_y[r_begin:r_begin + self.label_len]
 
-        seq_x_mark = self.data_stamp[s_begin:s_end]
-        seq_y_mark = self.data_stamp[r_begin:r_end]
-
-        return seq_x, seq_y, seq_x_mark, seq_y_mark
+        return seq_x, seq_y
 
     def __len__(self):
         return len(self.data_x) - self.seq_len + 1
