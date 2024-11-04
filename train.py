@@ -8,9 +8,9 @@ import numpy as np
 def main():
     args = argparse.Namespace(
         random_seed=2024,
-        is_training=False,       # 記得要改
-        model_id="weather_720",
-        model="ESGA",
+        is_training=True,       # 記得要改
+        model_id="weather_peko",
+        model="ESRA",
         data="custom",
         root_path="./dataset/",
         data_path="weather.csv",
@@ -22,8 +22,8 @@ def main():
         seq_len=80,
         label_len=0,
         pred_len=4,
-        seg_len=2,         # 要跟著 pred_len 一起改動
-        enc_in=4,          # 修改为你的特征数量?
+        seg_len=20,         # 要跟著 pred_len 一起改動
+        enc_in=5,          # 修改为你的特征数量?
         enc_out=1,          # 輸出
         d_model=512,
         dropout=0.5,
@@ -32,7 +32,7 @@ def main():
         train_epochs=30,
         batch_size=64,
         patience=10,
-        learning_rate=0.0001,
+        learning_rate=0.1,
         loss="bce",
         lradj="type3",
         pct_start=0.3,

@@ -221,36 +221,44 @@ def process_file(file_path: Path):
     df.loc[midnight_mask, '6h_period'] = '深夜'
     df.loc[midnight_mask, 'date'] = df.loc[midnight_mask, 'date'] - pd.Timedelta(days=1)
 
-    # 創建新的日期標示（只保留年月日，無具體時間）
-    # df['day'] = df['date'].dt.date
+    # 創建只保留年月日的標示
+    df['day'] = df['date'].dt.date
 
-    # 按日期和 6 小時時間段進行分組，計算每個時間段的平均值
-    grouped_df = df.groupby(['6h_period']).mean().reset_index()
+    grouped_df = df
+
+    # 按日期和 6 小時時間段進行分組，計算每個時間段的平均值（除了雨量是總和）
+    grouped_df = df.groupby(['day', '6h_period']).agg({
+        'p (mbar)': 'mean',
+        'T (degC)': 'mean',
+        'wd (deg)': 'mean',
+        'rh (%)': 'mean',
+        'rain (mm)': 'sum'  # 雨量累積
+    }).reset_index()
 
     # 設定正確的時間段排序順序
     period_order = ['深夜', '早上', '下午', '晚上']
     grouped_df['6h_period'] = pd.Categorical(grouped_df['6h_period'], categories=period_order, ordered=True)
 
-    # 按日期和時間段排序
-    grouped_df = grouped_df.sort_values(by=['6h_period', 'date'])
-
-    # 將 `day` 列重命名為 `date`，以符合原始要求
-    # grouped_df.rename(columns={'day': 'date'}, inplace=True)
+    # 排序結果
+    grouped_df = grouped_df.sort_values(by=['day', '6h_period'])
 
     # 填補缺失值
     for column in grouped_df.columns:
         if pd.api.types.is_numeric_dtype(grouped_df[column]):
             if grouped_df[column].isna().all():
-                grouped_df[column].fillna(0, inplace=True)
+                grouped_df[column] = grouped_df[column].fillna(0)
             else:
-                grouped_df[column].fillna(grouped_df[column].mean(), inplace=True)
+                grouped_df[column] = grouped_df[column].fillna(grouped_df[column].mean())
 
+    # 四捨五入保留兩位小數
     grouped_df = grouped_df.round(2)
 
-    grouped_df = grouped_df.drop(grouped_df.columns[1], axis=1)
+    # 計算雨量的概率（雨量 >= 1 mm 視為降雨）
+    grouped_df['rain_prob'] = (grouped_df['rain (mm)'] >= 1).astype(int)
 
-    grouped_df['rain_prob'] = (grouped_df['rain (mm)'] > 0).astype(int)
+    grouped_df = grouped_df.drop(["day"], axis=1)
 
+    # 最終結果
     grouped_df = grouped_df.reset_index(drop=True)
 
     return grouped_df

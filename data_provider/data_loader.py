@@ -83,7 +83,7 @@ class Dataset_Custom(Dataset):
             df_data = df_raw[[self.target]]
 
         if self.scale:
-            feature_data = df_data.iloc[:, :-2]
+            feature_data = df_data.iloc[:, :-1]
             true_label = df_data.iloc[:, -1:]
 
             # Fit
@@ -188,7 +188,7 @@ class Dataset_Pred(Dataset):
             df_data = df_raw[[self.target]]
 
         if self.scale:
-            feature_data = df_data.iloc[:, :-2]  # ignore rain
+            feature_data = df_data.iloc[:, :-1]  # ignore rain
             true_label = df_data.iloc[:, -1:]
 
             scaled_features = self.scaler.transform(feature_data.values)

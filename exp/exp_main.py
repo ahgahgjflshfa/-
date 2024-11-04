@@ -1,11 +1,10 @@
-import joblib
-
 from data_provider.data_factory import data_provider
 from exp.exp_basic import Exp_Basic
-from models import LSTM, SegRNN, ESegRNN_Attn
+from models import LSTM, SegRNN, ESRA
 from utils.tools import EarlyStopping, adjust_learning_rate, visual, test_params_flop
 from utils.metrics import metric
 from torchmetrics.classification import BinaryAccuracy
+import matplotlib.pyplot as plt
 
 import torch
 import torch.nn as nn
@@ -20,13 +19,33 @@ import numpy as np
 
 warnings.filterwarnings('ignore')
 
+
+# 自定義損失函數，結合Brier Score和Focal Loss
+class WeatherPredictionLoss(nn.Module):
+    def __init__(self, gamma=2.0, alpha=0.25):
+        super().__init__()
+        self.gamma = gamma
+        self.alpha = alpha
+
+    def forward(self, pred, target):
+        # Brier Score
+        brier_loss = torch.mean((pred - target) ** 2)
+
+        # Focal Loss
+        pt = pred * target + (1 - pred) * (1 - target)
+        focal_loss = -self.alpha * (1 - pt) ** self.gamma * torch.log(pt + 1e-7)
+        focal_loss = torch.mean(focal_loss)
+
+        return brier_loss + 0.5 * focal_loss
+
+
 class Exp_Main(Exp_Basic):
     def __init__(self, args):
         super(Exp_Main, self).__init__(args)
 
     def _build_model(self):
         model_dict = {
-            'ESGA': ESegRNN_Attn,
+            'ESRA': ESRA,
             'SegRNN': SegRNN,
             'LSTM': LSTM
         }
@@ -44,7 +63,7 @@ class Exp_Main(Exp_Basic):
         return data_set, data_loader
 
     def _select_optimizer(self):
-        model_optim = optim.Adam(self.model.parameters(), lr=self.args.learning_rate)
+        model_optim = optim.Adam(self.model.parameters(), lr=self.args.learning_rate, weight_decay=0.01)
 
         return model_optim
 
@@ -57,6 +76,9 @@ class Exp_Main(Exp_Basic):
 
         elif self.args.loss == "bce":
             criterion = nn.BCELoss()
+
+        elif self.args.loss == "custom":
+            criterion = WeatherPredictionLoss()
 
         else:
             criterion = nn.L1Loss()
@@ -122,11 +144,13 @@ class Exp_Main(Exp_Basic):
         if self.args.use_amp:
             scaler = torch.cuda.amp.GradScaler()
 
-        scheduler = lr_scheduler.OneCycleLR(optimizer=model_optim,
-                                            steps_per_epoch=train_steps,
-                                            pct_start=self.args.pct_start,
-                                            epochs=self.args.train_epochs,
-                                            max_lr=self.args.learning_rate)
+        scheduler = lr_scheduler.OneCycleLR(
+            optimizer=model_optim,
+            steps_per_epoch=train_steps,
+            pct_start=self.args.pct_start,
+            epochs=self.args.train_epochs,
+            max_lr=self.args.lr
+        )
 
         for epoch in range(self.args.train_epochs):
             iter_count = 0
@@ -266,8 +290,6 @@ class Exp_Main(Exp_Basic):
 
                     visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'))
 
-        ms = (time.time() - begin_time) * 1000 / len(test_data)
-
         if self.args.test_flop:
             test_params_flop(self.model, (batch_x.shape[1], batch_x.shape[2]))
             exit()
@@ -299,6 +321,21 @@ class Exp_Main(Exp_Basic):
         np.save(folder_path + 'pred.npy', preds)
         # np.save(folder_path + 'true.npy', trues)
         # np.save(folder_path + 'x.npy', inputx)
+
+        # Plot all predictions vs actual values as a line plot
+        plt.figure(figsize=(12, 6))
+        plt.plot(trues.reshape(-1), label='True Values', color='blue')
+        plt.plot(preds.reshape(-1), label='Predictions', color='red', alpha=0.7)
+        plt.title(f'{setting} - Predictions vs True Values')
+        plt.xlabel('Time Steps')
+        plt.ylabel('Value')
+        plt.legend()
+        plt.grid(True)
+        plt.savefig(os.path.join(folder_path, 'all_predictions_vs_true_values.png'))
+
+        plt.legend()
+        plt.show()
+
         return
 
     def predict(self, setting, load=False):
