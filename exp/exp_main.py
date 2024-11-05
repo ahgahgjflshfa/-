@@ -21,22 +21,32 @@ warnings.filterwarnings('ignore')
 
 
 # 自定義損失函數，結合Brier Score和Focal Loss
-class WeatherPredictionLoss(nn.Module):
-    def __init__(self, gamma=2.0, alpha=0.25):
-        super().__init__()
-        self.gamma = gamma
-        self.alpha = alpha
+class WeatherLoss(nn.Module):
+    def __init__(self, alpha=2.0, beta=1):
+        super(WeatherLoss, self).__init__()
+        self.alpha = alpha  # 正例權重
+        self.beta = beta  # 平滑係數
 
     def forward(self, pred, target):
-        # Brier Score
-        brier_loss = torch.mean((pred - target) ** 2)
+        # 標籤平滑化處理，避免模型過於自信
+        smoothed_targets = target * (1 - self.beta) + 0.5 * self.beta
 
-        # Focal Loss
-        pt = pred * target + (1 - pred) * (1 - target)
-        focal_loss = -self.alpha * (1 - pt) ** self.gamma * torch.log(pt + 1e-7)
-        focal_loss = torch.mean(focal_loss)
+        # 計算加權的BCE loss
+        bce = -(smoothed_targets * torch.log(pred + 1e-7) +
+                (1 - smoothed_targets) * torch.log(1 - pred + 1e-7))
 
-        return brier_loss + 0.5 * focal_loss
+        # 對正例施加更大權重
+        weights = torch.where(target > 0.5, self.alpha, 1.0)
+        weighted_bce = weights * bce
+
+        # 添加KL散度作為正則化項，防止預測過於極端
+        kl_div = pred * torch.log(pred / (smoothed_targets + 1e-7) + 1e-7) + \
+                 (1 - pred) * torch.log((1 - pred) / (1 - smoothed_targets + 1e-7) + 1e-7)
+
+        # 最終loss：加權BCE + KL散度正則化
+        loss = weighted_bce.mean() + 0.1 * kl_div.mean()
+
+        return loss
 
 
 class Exp_Main(Exp_Basic):
@@ -63,7 +73,7 @@ class Exp_Main(Exp_Basic):
         return data_set, data_loader
 
     def _select_optimizer(self):
-        model_optim = optim.Adam(self.model.parameters(), lr=self.args.learning_rate, weight_decay=0.01)
+        model_optim = optim.Adam(self.model.parameters(), lr=self.args.lr, weight_decay=0.01)
 
         return model_optim
 
@@ -78,7 +88,7 @@ class Exp_Main(Exp_Basic):
             criterion = nn.BCELoss()
 
         elif self.args.loss == "custom":
-            criterion = WeatherPredictionLoss()
+            criterion = WeatherLoss()
 
         else:
             criterion = nn.L1Loss()
@@ -144,12 +154,8 @@ class Exp_Main(Exp_Basic):
         if self.args.use_amp:
             scaler = torch.cuda.amp.GradScaler()
 
-        scheduler = lr_scheduler.OneCycleLR(
-            optimizer=model_optim,
-            steps_per_epoch=train_steps,
-            pct_start=self.args.pct_start,
-            epochs=self.args.train_epochs,
-            max_lr=self.args.lr
+        scheduler = lr_scheduler.ReduceLROnPlateau(
+            model_optim, mode='min', factor=0.5, patience=5, verbose=True
         )
 
         for epoch in range(self.args.train_epochs):

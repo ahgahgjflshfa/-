@@ -1,9 +1,7 @@
 import os
 import time
-import shutil
 import pandas as pd
 from pathlib import Path
-from sklearn.model_selection import train_test_split
 from selenium import webdriver
 from selenium.webdriver.edge.service import Service
 from selenium.webdriver.common.by import By
@@ -58,15 +56,15 @@ def download_data(
     ie_options = webdriver.EdgeOptions()
 
     # Enable headless mode
-    ie_options.add_argument("headless")
-    ie_options.add_argument("disable-gpu")
+    # ie_options.add_argument("headless")
+    # ie_options.add_argument("disable-gpu")
 
     # Set default download directory
     cur_dir = os.getcwd()
     download_dir = os.path.join(cur_dir, dir_name)
     ie_options.add_experimental_option("prefs", {
         "download.default_directory": download_dir,
-        })
+    })
 
     # Create a driver instance
     driver = webdriver.Edge(service=service, options=ie_options)
@@ -109,13 +107,13 @@ def download_data(
 
     # start from specific date
     date_button_element = WebDriverWait(driver, 10).until(
-        EC.presence_of_element_located((By.XPATH, '/html/body/div/main/div/div/section[2]/div/div/section/div[5]/div[1]/div[1]/label/div/div[2]/input'))
+        EC.presence_of_element_located((By.XPATH, '/html/body/div/main/div/div/section[2]/div/div/section/div[5]/div[1]/div[1]/label/div/div[2]/div[1]/input'))
     )
     date_button_element.click()
 
     # find year select button and click it
     year_select_button_element = WebDriverWait(driver, 10).until(
-        EC.presence_of_element_located((By.XPATH, '/html/body/div/main/div/div/section[2]/div/div/section/div[5]/div[1]/div[1]/label/div/div[2]/div/div[2]/div[1]/div[1]'))
+        EC.presence_of_element_located((By.XPATH, '/html/body/div/main/div/div/section[2]/div/div/section/div[5]/div[1]/div[1]/label/div/div[2]/div[1]/div/div[2]/div[1]/div[1]'))
     )
     year_select_button_element.click()
 
@@ -128,7 +126,7 @@ def download_data(
 
     # find month select button and click it
     month_select_button_element = WebDriverWait(driver, 10).until(
-        EC.presence_of_element_located((By.XPATH, '/html/body/div/main/div/div/section[2]/div/div/section/div[5]/div[1]/div[1]/label/div/div[2]/div/div[2]/div[1]/div[2]'))
+        EC.presence_of_element_located((By.XPATH, '/html/body/div/main/div/div/section[2]/div/div/section/div[5]/div[1]/div[1]/label/div/div[2]/div[1]/div/div[2]/div[1]/div[2]'))
     )
     month_select_button_element.click()
 
@@ -158,7 +156,7 @@ def download_data(
 
         # time.sleep(0.5)   # wait for download to complete
 
-        next_page_element = driver.find_element(By.XPATH, "/html/body/div/main/div/div/section[2]/div/div/section/div[5]/div[1]/div[1]/label/div/div[4]")
+        next_page_element = driver.find_element(By.XPATH, "/html/body/div/main/div/div/section[2]/div/div/section/div[5]/div[1]/div[1]/label/div/div[3]")
         next_page_element.click()
 
         # Move to the next date
