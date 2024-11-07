@@ -16,3 +16,10 @@ driver/msedgedriver.exe
 /test_results/
 /dataset/
 /.neptune/
+/checkpoints/
+/scaler/
+/data_provider/__pycache__/
+exp/__pycache__/
+models/__pycache__/
+utils/__pycache__/
+

@@ -17,7 +17,8 @@ class DataIncorrectError(Exception):
 def download_data(
     start_date: str,
     end_date: str,
-    driver_path: str | Path=Path("./driver/msedgedriver.exe"),
+    driver_path: str | Path = Path("./driver/msedgedriver.exe"),
+    station_name: str = "桃園 (C0C480)",
     dir_name: str="download"
 ):
     """
@@ -61,9 +62,11 @@ def download_data(
 
     # Set default download directory
     cur_dir = os.getcwd()
-    download_dir = os.path.join(cur_dir, dir_name)
+    download_dir = os.path.join(cur_dir, dir_name).replace('/', '\\')
+
     ie_options.add_experimental_option("prefs", {
         "download.default_directory": download_dir,
+        "download.prompt_for_download": False,  # 自動下載而不提示
     })
 
     # Create a driver instance
@@ -78,18 +81,11 @@ def download_data(
     )
     checkbox_element.click()
 
-    # choose a specific area (e.g. "桃園")
-    select_element = WebDriverWait(driver, 10).until(
-        EC.presence_of_element_located((By.ID, "station_area"))
-    )
-    select = Select(select_element)
-    select.select_by_index(4)
-
     # enter specific station name (e.g. "中壢 (C0C700)")
     input_element = WebDriverWait(driver, 10).until(
         EC.presence_of_element_located((By.XPATH, "/html/body/div/main/div/div/div/div/aside/div/div[1]/div/div/section/ul/li[5]/div/div[2]/div/input"))
     )
-    input_element.send_keys("桃園 (C0C480)")
+    input_element.send_keys(station_name)
 
     time.sleep(1)
 
@@ -197,12 +193,15 @@ def process_file(file_path: Path):
         # 讀取 CSV 文件
         df = pd.read_csv(file_path, skiprows=0, na_values=['--', '\\', '/', '&', 'X', ' '])
 
-    # 添加所需的特徵
-    df['T (degC)'] = df['Temperature']  # 溫度
-    df['rh (%)'] = df['RH']  # 相對濕度
-    df['wd (deg)'] = df['WD']  # 風向
-    df['p (mbar)'] = df['StnPres']  # 氣壓
-    df['rain (mm)'] = df['Precp']  # 雨量
+    try:
+        # 添加所需的特徵
+        df['T (degC)'] = df['Temperature']  # 溫度
+        df['rh (%)'] = df['RH']  # 相對濕度
+        df['wd (deg)'] = df['WD']  # 風向
+        df['p (mbar)'] = df['StnPres']  # 氣壓
+        df['rain (mm)'] = df['Precp']  # 雨量
+    except KeyError:
+        pass
 
     # 只保留所需的特徵
     df = df[['date', 'p (mbar)', 'T (degC)', 'wd (deg)', 'rh (%)', 'rain (mm)']]
@@ -295,8 +294,9 @@ def prepare_data(
     download: bool=False,
     start_date: str= "",
     end_date: str="",
-    dir_name:str="download",
-    output_file="./dataset/weather.csv"
+    station_name="桃園 (C0C480)",
+    download_dir:str= "download",
+    output_dir="./dataset"
 ):
     """
 
@@ -304,8 +304,9 @@ def prepare_data(
         download (optional): Download or not.
         start_date (optional): Starting date. If no value pass, data won't be downloaded.
         end_date (optional): Ending date.
-        dir_name (optional): Directory to put downloaded files. Default is `download`.
-        output_file (optional): Where to save output data. Default is `dataset/weather.csv`
+        download_dir (optional): Directory to put downloaded files. Default is `download`.
+        station_name (optional): Which weather station's data to download.
+        output_dir (optional): Where to save output data. Default is `dataset/weather.csv`
 
     Returns:
         None
@@ -314,12 +315,12 @@ def prepare_data(
         How many features in dataset.
     """
     if download:
-        download_data(start_date=start_date, end_date=end_date, dir_name=dir_name)
+        download_data(start_date=start_date, end_date=end_date, station_name=station_name, dir_name=f"{download_dir}/{station_name}")
 
-    save_to_weather_csv(input_directory=dir_name, output_file=output_file, start_date=start_date, end_date=end_date)
+    save_to_weather_csv(input_directory=f"{download_dir}/{station_name}", output_file=f"{output_dir}/{station_name}.csv", start_date=start_date, end_date=end_date)
 
     # print(f"{len(proper_columns)} features.")
 
 if __name__ == "__main__":
 
-    prepare_data()
+    prepare_data(download=False, start_date= "2020-01-01", end_date= "2024-11-07", station_name="南澳 (C0U770)")
