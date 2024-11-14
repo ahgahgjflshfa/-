@@ -12,7 +12,7 @@ warnings.filterwarnings('ignore')
 class Dataset_Custom(Dataset):
     def __init__(self, root_path, flag='train', size=None,
                  features='S', data_path='ETTh1.csv',
-                 target='OT', scale=True, freq='h'):
+                 target='OT', scale=True):
         # size [seq_len, label_len, pred_len]
         # info
         if size == None:
@@ -33,7 +33,6 @@ class Dataset_Custom(Dataset):
         self.features = features
         self.target = target
         self.scale = scale
-        self.freq = freq
 
         self.root_path = root_path
         self.data_path = data_path
@@ -128,7 +127,7 @@ class Dataset_Custom(Dataset):
 class Dataset_Pred(Dataset):
     def __init__(self, root_path, flag='pred', size=None,
                  features='S', data_path='ETTh1.csv',
-                 target='OT', scale=True, inverse=False, timeenc=0, freq='15min', cols=None):
+                 target='OT', scale=True, inverse=False, timeenc=0, cols=None):
         # size [seq_len, label_len, pred_len]
         # info
         if size == None:
@@ -147,7 +146,6 @@ class Dataset_Pred(Dataset):
         self.scale = scale
         self.inverse = inverse
         self.timeenc = timeenc
-        self.freq = freq
         self.cols = cols
         self.root_path = root_path
         self.data_path = data_path
@@ -177,7 +175,7 @@ class Dataset_Pred(Dataset):
             cols.remove('6h_period')
 
         df_raw = df_raw[['6h_period'] + cols + [self.target]]
-        border1 = len(df_raw) - self.seq_len
+        border1 = 0
         border2 = len(df_raw)
 
         if self.features == 'M' or self.features == 'MS':
@@ -209,13 +207,10 @@ class Dataset_Pred(Dataset):
         s_begin = index
         s_end = s_begin + self.seq_len
         r_begin = s_end - self.label_len
+        r_end = r_begin + self.label_len + self.pred_len
 
         seq_x = self.data_x[s_begin:s_end]
-        if self.inverse:
-            seq_y = self.data_x[r_begin:r_begin + self.label_len]
-
-        else:
-            seq_y = self.data_y[r_begin:r_begin + self.label_len]
+        seq_y = self.data_y[r_begin:r_end]
 
         return seq_x, seq_y
 

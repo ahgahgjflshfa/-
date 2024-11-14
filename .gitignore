@@ -17,9 +17,10 @@ driver/msedgedriver.exe
 /dataset/
 /.neptune/
 /checkpoints/
-/scaler/
+scaler/scaler.joblib
 /data_provider/__pycache__/
 exp/__pycache__/
 models/__pycache__/
 utils/__pycache__/
 
+/saved_models/EAGNet-v0.2.pth

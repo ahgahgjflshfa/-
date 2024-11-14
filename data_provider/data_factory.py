@@ -8,20 +8,17 @@ def data_provider(args, flag):
         shuffle_flag = False
         drop_last = False  # fix bug
         batch_size = args.batch_size
-        freq = args.freq
 
     elif flag == 'pred':
         shuffle_flag = False
         drop_last = False
         batch_size = 1
-        freq = args.freq
         Data = Dataset_Pred
 
     else:
         shuffle_flag = True
         drop_last = True
         batch_size = args.batch_size
-        freq = args.freq
 
     data_set = Data(
         root_path=args.root_path,
@@ -29,8 +26,7 @@ def data_provider(args, flag):
         flag=flag,
         size=[args.seq_len, args.label_len, args.pred_len],
         features=args.features,
-        target=args.target,
-        freq=freq
+        target=args.target
     )
 
     print(flag, len(data_set), end="\n")

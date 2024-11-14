@@ -7,8 +7,8 @@ def main():
     args = argparse.Namespace(
         random_seed=2024,
         is_training=True,       # 記得要改
-        model_id="weather_80",
-        model="ESRA",
+        model_id="dklfjlaksdjfl",
+        model="EAGNet",
         data="custom",
         root_path="./dataset/",
         data_path="weather.csv",
@@ -27,13 +27,13 @@ def main():
         dropout=0.5,
         do_predict=False,
         num_workers=10,
-        train_epochs=30,
+        train_epochs=50,
         batch_size=64,
         patience=10,
         lr=0.1,
         loss="bce",
         lradj="type3",
-        pct_start=0.3,
+        # pct_start=0.3,
         use_amp=False,
         use_gpu=True,
         gpu=0,
@@ -43,14 +43,14 @@ def main():
         itr=1,
         rnn_type="gru",
         dec_way="pmf",
-        des="test",
+        des="test"
     )
 
     # 設定隨機種子
     # fix_seed = args.random_seed
     # random.seed(fix_seed)
     # torch.manual_seed(fix_seed)
-    # np.random.seed(fix_seed)
+    # np.random.seed(fix_seed)o
 
     args.use_gpu = True if torch.cuda.is_available() and args.use_gpu else False
 

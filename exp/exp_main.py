@@ -138,6 +138,10 @@ class Exp_Main(Exp_Basic):
         vali_data, vali_loader = self._get_data(flag='val')
         test_data, test_loader = self._get_data(flag='test')
 
+        # if self.args.load_before_train:
+        #     print('loading model\n')
+        #     self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
+
         # Checkpoints
         path = os.path.join(self.args.checkpoints, setting)
         if not os.path.exists(path):
@@ -155,7 +159,7 @@ class Exp_Main(Exp_Basic):
             scaler = torch.cuda.amp.GradScaler()
 
         scheduler = lr_scheduler.ReduceLROnPlateau(
-            model_optim, mode='min', factor=0.5, patience=5, verbose=True
+            model_optim, mode='min', factor=0.5, patience=10, verbose=True
         )
 
         for epoch in range(self.args.train_epochs):
@@ -255,7 +259,6 @@ class Exp_Main(Exp_Basic):
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
 
-        begin_time = time.time()
         self.model.eval()
         with torch.no_grad():
             for i, (batch_x, batch_y) in enumerate(test_loader):
@@ -330,14 +333,15 @@ class Exp_Main(Exp_Basic):
 
         # Plot all predictions vs actual values as a line plot
         plt.figure(figsize=(12, 6))
-        plt.plot(trues.reshape(-1), label='True Values', color='blue')
-        plt.plot(preds.reshape(-1), label='Predictions', color='red', alpha=0.7)
+        plt.plot(trues.reshape(-1), label='True Values', color='blue', alpha=0.3)
+        plt.plot(preds.reshape(-1), label='Predictions', color='red')
         plt.title(f'{setting} - Predictions vs True Values')
         plt.xlabel('Time Steps')
         plt.ylabel('Value')
         plt.legend()
         plt.grid(True)
-        plt.savefig(os.path.join(folder_path, 'all_predictions_vs_true_values.png'))
+        save_name = self.args.data_path.split()[0]
+        plt.savefig(os.path.join(folder_path, f"{save_name}.png"))
 
         plt.legend()
         plt.show()

@@ -4,27 +4,22 @@ from exp.exp_main import Exp_Main
 
 def main():
     args = argparse.Namespace(
-        random_seed=2024,
-        is_training=True,  # 記得要改
         model_id="weather_80",
         model="EAGNet",
         data="custom",
         root_path="./dataset/",
         data_path="桃園 (C0C480).csv",
         features="M",
-        target="rain_prob",  # 这里你需要确保目标列存在，并且改成你需要预测的特征
-        freq="h",
+        target="rain_prob",                     # 这里你需要确保目标列存在，并且改成你需要预测的特征
         checkpoints="./checkpoints/",
-        scaler="./scaler/",
-        seq_len=80,
+        seq_len=80,                             # 用前幾個時間段的資料作為輸入
         label_len=0,
-        pred_len=4,
-        seg_len=20,  # 要跟著 pred_len 一起改動
-        enc_in=5,  # 修改为你的特征数量?
-        enc_out=1,  # 輸出
-        d_model=512,
+        pred_len=4,                             # 預測後面多少個時間段
+        seg_len=20,                             # For SegRNN (要跟著 pred_len 一起改動)
+        enc_in=5,                               # 輸入特徵數量
+        enc_out=1,                              # For SegRNN (輸出特徵數量)
+        d_model=512,                            # 隱藏層大小
         dropout=0.5,
-        do_predict=False,
         num_workers=10,
         train_epochs=30,
         batch_size=64,
@@ -32,7 +27,6 @@ def main():
         lr=0.1,
         loss="bce",
         lradj="type3",
-        pct_start=0.3,
         use_amp=False,
         use_gpu=True,
         gpu=0,

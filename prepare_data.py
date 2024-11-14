@@ -2,35 +2,40 @@ import os
 import time
 import pandas as pd
 from pathlib import Path
+
+from numpy.f2py.auxfuncs import throw_error
 from selenium import webdriver
 from selenium.webdriver.edge.service import Service
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import Select
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from datetime import datetime, timedelta
+
+import warnings
+
 
 class DataIncorrectError(Exception):
     def __init__(self, messages):
         super.__init__(messages)
 
 def download_data(
-    start_date: str,
-    end_date: str,
+    start_date: str = None,
+    end_date: str = None,
+    date_list: list[str] = None,  # 選擇多個特定日期
     driver_path: str | Path = Path("./driver/msedgedriver.exe"),
     station_name: str = "桃園 (C0C480)",
     dir_name: str="download"
 ):
     """
-    Download data starting from the specified START_DATE for N days.
+    Download data for the specified date range or list of dates.
 
     Args:
-        start_date: The start date from which to download the data in the format 'YYYY-MM-DD'.
-        n (optional): The number of days' worth of data to download, counting backwards from START_DATE.
-                        Defaults to 1.
-        driver_path (optional): The path to the driver executable used for web scraping.
-                                Defaults to "driver/msedgedriver.exe".
-        dir_name (optional): The directory name of download directory
+        start_date (optional): Start date in 'YYYY-MM-DD' format. Used if date_list is None.
+        end_date (optional): End date in 'YYYY-MM-DD' format. Used if date_list is None.
+        date_list (optional): Specific list of dates in 'YYYY-MM-DD' format.
+        driver_path (optional): Path to the driver executable for web scraping.
+        station_name (optional): Name of the weather station.
+        dir_name (optional): Directory name for downloaded files.
 
     Returns:
         None
@@ -39,16 +44,29 @@ def download_data(
     MONTH_NAMES = ["January", "February", "March", "April", "May", "June",
                    "July", "August", "September", "October", "November", "December"]
 
-    # Convert start_date and end_date to datetime objects
-    start_dt = datetime.strptime(start_date, "%Y-%m-%d")
-    end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+    # 檢查並生成日期清單
+    if date_list is None:
+        if start_date and end_date:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+            if start_dt > end_dt:
+                raise ValueError("The start date cannot be after the end date.")
+            # 生成範圍內的日期清單
+            date_list = [(start_dt + timedelta(days=i)).strftime("%Y-%m-%d") for i in
+                         range((end_dt - start_dt).days + 1)]
+        else:
+            raise ValueError("Either date_list or start and end dates must be provided.")
 
-    if start_dt > end_dt:
-        raise ValueError("The start date cannot be after the end date.")
-
-    START_YEAR = start_date[:4]
-    START_MONTH = MONTH_NAMES[int(start_date[5:7]) - 1]
-    START_DAY = start_date[8:].lstrip("0")    # delete leading zero
+    # # Convert start_date and end_date to datetime objects
+    # start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+    # end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+    #
+    # if start_dt > end_dt:
+    #     raise ValueError("The start date cannot be after the end date.")
+    #
+    # START_YEAR = start_date[:4]
+    # START_MONTH = MONTH_NAMES[int(start_date[5:7]) - 1]
+    # START_DAY = start_date[8:].lstrip("0")    # delete leading zero
 
     # Set webdriver path
     service = Service(executable_path=driver_path)
@@ -66,7 +84,7 @@ def download_data(
 
     ie_options.add_experimental_option("prefs", {
         "download.default_directory": download_dir,
-        "download.prompt_for_download": False,  # 自動下載而不提示
+        "download.prompt_for_download": False,
     })
 
     # Create a driver instance
@@ -101,64 +119,58 @@ def download_data(
 
     time.sleep(1)
 
-    # start from specific date
-    date_button_element = WebDriverWait(driver, 10).until(
-        EC.presence_of_element_located((By.XPATH, '/html/body/div/main/div/div/section[2]/div/div/section/div[5]/div[1]/div[1]/label/div/div[2]/div[1]/input'))
-    )
-    date_button_element.click()
+    for date_str in date_list:
+        # Parse date into components
+        date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+        year, month, day = date_obj.year, MONTH_NAMES[date_obj.month - 1], date_obj.day
 
-    # find year select button and click it
-    year_select_button_element = WebDriverWait(driver, 10).until(
-        EC.presence_of_element_located((By.XPATH, '/html/body/div/main/div/div/section[2]/div/div/section/div[5]/div[1]/div[1]/label/div/div[2]/div[1]/div/div[2]/div[1]/div[1]'))
-    )
-    year_select_button_element.click()
+        # Click on date select button
+        date_button_element = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, '/html/body/div/main/div/div/section[2]/div/div/section/div[5]/div[1]/div[1]/label/div/div[2]/div[1]/input'))
+        )
+        date_button_element.click()
 
-    # select specific year (e.g. "2023")
-    xpath = f'//div[contains(@class, "vdatetime-year-picker__item") and contains(text(), "{START_YEAR}")]'
-    year_element = WebDriverWait(driver, 10).until(
-        EC.presence_of_element_located((By.XPATH, xpath))
-    )
-    year_element.click()
+        year_select_button_element = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, '/html/body/div/main/div/div/section[2]/div/div/section/div[5]/div[1]/div[1]/label/div/div[2]/div[1]/div/div[2]/div[1]/div[1]'))
+        )
+        year_select_button_element.click()
 
-    # find month select button and click it
-    month_select_button_element = WebDriverWait(driver, 10).until(
-        EC.presence_of_element_located((By.XPATH, '/html/body/div/main/div/div/section[2]/div/div/section/div[5]/div[1]/div[1]/label/div/div[2]/div[1]/div/div[2]/div[1]/div[2]'))
-    )
-    month_select_button_element.click()
+        # select specific year (e.g. "2023")
+        xpath = f'//div[contains(@class, "vdatetime-year-picker__item") and contains(text(), "{year}")]'
+        year_element = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, xpath))
+        )
+        year_element.click()
 
-    # select specific month (e.g. "04")
-    xpath = f'//div[contains(@class, "vdatetime-month-picker__item") and contains(text(), "{START_MONTH}")]'
-    month_element = WebDriverWait(driver, 10).until(
-        EC.presence_of_element_located((By.XPATH, xpath))
-    )
-    month_element.click()
+        # find month select button and click it
+        month_select_button_element = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, '/html/body/div/main/div/div/section[2]/div/div/section/div[5]/div[1]/div[1]/label/div/div[2]/div[1]/div/div[2]/div[1]/div[2]'))
+        )
+        month_select_button_element.click()
 
-    # select specific day (e.g. "17")
-    xpath = f'//div[contains(@class, "vdatetime-calendar__month__day") and descendant::span/span[text()="{START_DAY}"]]'
-    day_element = WebDriverWait(driver, 10).until(
-        EC.presence_of_element_located((By.XPATH, xpath))
-    )
-    day_element.click()
+        # select specific month (e.g. "04")
+        xpath = f'//div[contains(@class, "vdatetime-month-picker__item") and contains(text(), "{month}")]'
+        month_element = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, xpath))
+        )
+        month_element.click()
 
-    # Iterate over the date range
-    current_date = start_dt
+        # select specific day (e.g. "17")
+        xpath = f'//div[contains(@class, "vdatetime-calendar__month__day") and descendant::span/span[text()="{day}"]]'
+        day_element = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, xpath))
+        )
+        day_element.click()
 
-    while current_date <= end_dt:
+        time.sleep(0.5)
+
         # download csv to Downloads
         download_button_element = WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.XPATH, '/html/body/div/main/div/div/section[2]/div/div/section/div[5]/div[1]/div[2]/div'))
         )
         download_button_element.click()
 
-        # time.sleep(0.5)   # wait for download to complete
-
-        next_page_element = driver.find_element(By.XPATH, "/html/body/div/main/div/div/section[2]/div/div/section/div[5]/div[1]/div[1]/label/div/div[3]")
-        next_page_element.click()
-
-        # Move to the next date
-        current_date += timedelta(days=1)
-
-        time.sleep(0.5)
+    time.sleep(1)
 
     driver.quit()
 
@@ -204,7 +216,11 @@ def process_file(file_path: Path):
         pass
 
     # 只保留所需的特徵
-    df = df[['date', 'p (mbar)', 'T (degC)', 'wd (deg)', 'rh (%)', 'rain (mm)']]
+    try:
+        df = df[['date', 'p (mbar)', 'T (degC)', 'wd (deg)', 'rh (%)', 'rain (mm)']]
+
+    except KeyError as e:
+        raise KeyError(repr(e) + f" in file {file_path}")
 
     # 將時間按 6 小時分組
     df['6h_period'] = (df['date'].dt.hour // 6) % 4  # 將每個日期時間按 6 小時的間隔分組
@@ -282,31 +298,42 @@ def save_to_weather_csv(input_directory, output_file, start_date=None, end_date=
         if (start_date and file_date < start_date) or (end_date and file_date > end_date):
             continue  # 跳過不在範圍內的檔案
 
-        # 處理符合條件的檔案
-        df = process_file(file_path)
-        combined_df = pd.concat([combined_df, df], ignore_index=True)
+        with warnings.catch_warnings(record=True) as w:
+            # 處理符合條件的檔案
+            df = process_file(file_path)
+            combined_df = pd.concat([combined_df, df], ignore_index=True)
+
+            # 確認警告是否出現
+            if w and issubclass(w[-1].category, FutureWarning):
+                print(f"捕捉到 FutureWarning！請檢查檔案: {file_path}")
 
     # 將篩選後的資料保存為 CSV
     combined_df.to_csv(output_file, index=False)
 
 
 def prepare_data(
+    station_name,
     download: bool=False,
-    start_date: str= "",
-    end_date: str="",
-    station_name="桃園 (C0C480)",
+    start_date: str= None,
+    end_date: str = None,
+    date_list: list[str] = None,
     download_dir:str= "download",
-    output_dir="./dataset"
+    output_dir="./dataset",
+    output_name=None,
+    combine=True
 ):
     """
+    A function to prepare data for model.
 
     Args:
         download (optional): Download or not.
         start_date (optional): Starting date. If no value pass, data won't be downloaded.
         end_date (optional): Ending date.
+        date_list (optional): Specify specific dates' data to be downloaded.
         download_dir (optional): Directory to put downloaded files. Default is `download`.
         station_name (optional): Which weather station's data to download.
         output_dir (optional): Where to save output data. Default is `dataset/weather.csv`
+        combine (optional): Combine data into one csv file or not. Default is True.
 
     Returns:
         None
@@ -315,12 +342,33 @@ def prepare_data(
         How many features in dataset.
     """
     if download:
-        download_data(start_date=start_date, end_date=end_date, station_name=station_name, dir_name=f"{download_dir}/{station_name}")
+        download_data(
+            start_date=start_date,
+            end_date=end_date,
+            date_list=date_list,
+            station_name=station_name,
+            dir_name=f"{download_dir}/{station_name}"
+        )
 
-    save_to_weather_csv(input_directory=f"{download_dir}/{station_name}", output_file=f"{output_dir}/{station_name}.csv", start_date=start_date, end_date=end_date)
+    if combine:
+        if not output_name:
+            save_to_weather_csv(
+                input_directory=f"{download_dir}/{station_name}",
+                output_file=f"{output_dir}/{station_name}.csv",
+                start_date=start_date,
+                end_date=end_date
+            )
+        else:
+            save_to_weather_csv(
+                input_directory=f"{download_dir}/{station_name}",
+                output_file=f"{output_dir}/{output_name}.csv",
+                start_date=start_date,
+                end_date=end_date
+            )
 
     # print(f"{len(proper_columns)} features.")
 
 if __name__ == "__main__":
+    date_list = ['2024-07-02', '2024-07-11', '2024-07-21']
 
-    prepare_data(download=False, start_date= "2020-01-01", end_date= "2024-11-07", station_name="南澳 (C0U770)")
+    prepare_data(download=False, start_date="2024-07-01", end_date="2024-07-22", station_name="富源 (C0Z080)", output_name="predict")
